@@ -1,0 +1,171 @@
+import { motion } from "framer-motion";
+import { useMemo, useState } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
+import BrandedShell from "../../components/BrandedShell";
+import GameButton from "../../components/GameButton";
+import {
+  CHALLENGE_BY_NODE,
+  DOMAIN_THEME,
+  isDomainKey,
+  type DomainKey,
+} from "./challenge/challengeData";
+
+const glow =
+  "0 0 10px rgba(255,255,255,0.35), 0 0 24px rgba(255,255,255,0.12)";
+
+/** `/challenge?node=cs|ps|ai|ux|gd` — domain challenge from map markers (standalone layout, no sidebar). */
+export default function MainChallengePage() {
+  const [searchParams] = useSearchParams();
+  const nodeRaw = searchParams.get("node")?.toLowerCase() ?? "";
+  const [submission, setSubmission] = useState("");
+
+  const domain = useMemo((): DomainKey | null => {
+    return isDomainKey(nodeRaw) ? nodeRaw : null;
+  }, [nodeRaw]);
+
+  if (!domain) {
+    return <Navigate to="/main" replace />;
+  }
+
+  const c = CHALLENGE_BY_NODE[domain];
+  const theme = DOMAIN_THEME[domain];
+
+  return (
+    <motion.div
+      className="flex w-full min-w-0 flex-1 flex-col"
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <BrandedShell
+        compact
+        className={[
+          "relative flex min-h-[min(52vh,520px)] flex-1 flex-col overflow-hidden",
+          theme.shellBorder,
+          theme.shellRing,
+          "bg-linear-to-br! from-white/11! via-white/5! to-white/3!",
+          "backdrop-blur-3xl backdrop-saturate-200",
+          "shadow-[0_12px_48px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.18)]",
+          "md:min-h-[min(62vh,640px)]",
+        ].join(" ")}
+      >
+        <div
+          className="pointer-events-none absolute inset-0 bg-linear-to-b from-transparent via-black/10 to-black/25"
+          aria-hidden
+        />
+
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-5 px-2 py-4 sm:px-4 md:px-6 md:py-6">
+          <header className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+            <div className="flex min-w-0 flex-1 items-center justify-center gap-3 sm:gap-5 md:gap-8">
+              <img
+                src={c.logo}
+                alt=""
+                className={`h-12 w-12 shrink-0 rounded-full sm:h-14 sm:w-14 md:h-16 md:w-16 ${theme.logoClass}`}
+              />
+              <div className="min-w-0 flex-1 text-center">
+                <p
+                  className="font-Shuriken text-[0.65rem] font-bold tracking-[0.22em] text-white/90 sm:text-xs md:text-sm"
+                  style={{ textShadow: glow }}
+                >
+                  {c.zoneLabel}
+                </p>
+                <h1
+                  className="mt-1 font-Shuriken text-lg font-black tracking-[0.18em] text-white sm:text-xl md:text-2xl"
+                  style={{ textShadow: glow }}
+                >
+                  {c.domainTitle}
+                </h1>
+              </div>
+              <img
+                src={c.logo}
+                alt=""
+                className={`h-12 w-12 shrink-0 rounded-full sm:h-14 sm:w-14 md:h-16 md:w-16 ${theme.logoClass}`}
+              />
+            </div>
+          </header>
+
+          <div
+            className={[
+              "rounded-xl px-3 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+              "backdrop-blur-md sm:px-5 sm:py-5 md:px-6",
+              theme.innerPanelClass,
+            ].join(" ")}
+          >
+            <p
+              className="font-Shuriken text-left text-[0.65rem] font-bold leading-relaxed tracking-[0.08em] text-white/95 sm:text-xs md:text-sm md:leading-relaxed md:tracking-[0.1em]"
+              style={{ textShadow: glow }}
+            >
+              {c.narrative}
+            </p>
+
+            <h2
+              className="mt-6 font-Shuriken text-sm font-black tracking-[0.28em] sm:text-base"
+              style={{ color: theme.taskColor, textShadow: glow }}
+            >
+              TASK:
+            </h2>
+            <p
+              className="mt-2 font-Shuriken text-left text-[0.65rem] font-bold leading-relaxed tracking-[0.08em] text-white/95 sm:text-xs md:text-sm"
+              style={{ textShadow: glow }}
+            >
+              {c.taskBody}
+            </p>
+
+            <div className="mt-8 flex flex-col gap-4 border-t border-white/10 pt-6">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex cursor-pointer">
+                  <input type="file" className="sr-only" accept=".pdf,application/pdf" />
+                  <span
+                    className={[
+                      "inline-flex min-h-10 items-center justify-center rounded-sm border px-6 py-2",
+                      "font-Shuriken text-xs font-black tracking-[0.35em] text-white transition-colors",
+                      theme.fileBtnClass,
+                    ].join(" ")}
+                  >
+                    FILE
+                  </span>
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="sr-only">Submission</span>
+                <input
+                  type="text"
+                  value={submission}
+                  onChange={(e) => setSubmission(e.target.value)}
+                  placeholder="SUBMIT HERE"
+                  className={[
+                    "w-full rounded-sm border border-white/15 bg-black/55 px-4 py-3",
+                    "font-Shuriken text-xs font-bold tracking-[0.12em] text-white placeholder:text-white/35",
+                    "outline-none focus:ring-2",
+                    theme.inputFocusClass,
+                    "md:text-sm",
+                  ].join(" ")}
+                />
+              </label>
+              <p
+                className="font-Shuriken text-[0.55rem] tracking-[0.2em] text-white/65 md:text-xs"
+                style={{ textShadow: glow }}
+              >
+                SUBMIT FORM: PDF
+              </p>
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <GameButton
+                to="/main"
+                fullWidth={false}
+                className="shrink-0"
+                outerBgClass="bg-[#C5A059]"
+                bgClass="!rounded-md border !border-[#333B36] bg-[#C5A059] !px-10 !py-2.5 hover:bg-[#b8924f]"
+                fontClass="font-Shuriken text-xs font-black tracking-[0.35em] text-black md:text-sm"
+              >
+                HOME
+              </GameButton>
+            </div>
+          </div>
+        </div>
+      </BrandedShell>
+    </motion.div>
+  );
+}
