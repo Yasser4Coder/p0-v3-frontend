@@ -29,12 +29,18 @@ import mainTimerBg from "./TimerBg.png";
 import bookImg from "./book.png";
 import backOfCard from "./backOfCard.png";
 
-import { splashCriticalAssets } from "./splashCritical";
+import {
+  splashCriticalAssets,
+  buttonClickSound,
+  splashIntroMusic,
+} from "./splashCritical";
 
 export {
   splashGif,
   splashBg,
   headerBg,
+  buttonClickSound,
+  splashIntroMusic,
   splashCriticalAssets,
   splashPublicAssets,
   splashPriorityAssets,
@@ -42,6 +48,8 @@ export {
 
 export const heavyAssets = [
   ...splashCriticalAssets,
+  buttonClickSound,
+  splashIntroMusic,
   welcomeBg,
   loginBg,
   loginGif,
@@ -72,9 +80,12 @@ export const heavyAssets = [
   backOfCard,
 ];
 
-/** Preload queue after splash-critical URLs (same strings as in `heavyAssets`, minus splash trio). */
+/** Preload queue after splash-critical URLs / phase-1 sfx (splash trio + click + intro load in phase 1 only). */
 export const heavyAssetsAfterSplash = heavyAssets.filter(
-  (url) => !splashCriticalAssets.includes(url),
+  (url) =>
+    !splashCriticalAssets.includes(url) &&
+    url !== buttonClickSound &&
+    url !== splashIntroMusic,
 );
 
 export {

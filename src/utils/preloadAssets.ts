@@ -27,25 +27,40 @@ export type PreloadAssetsOptions = {
   skipIfAlreadyLoaded?: boolean;
 };
 
-function loadImages(
+function isLikelyAudioUrl(url: string): boolean {
+  return /\.(mp3|wav|ogg)$/i.test(url.split("?")[0] ?? "");
+}
+
+function preloadOneAsset(url: string): Promise<void> {
+  if (isLikelyAudioUrl(url)) {
+    return new Promise<void>((resolve) => {
+      const audio = new Audio();
+      audio.preload = "auto";
+      const done = () => resolve();
+      audio.addEventListener("canplaythrough", done, { once: true });
+      audio.addEventListener("error", done, { once: true });
+      audio.src = url;
+      audio.load();
+    });
+  }
+
+  return new Promise<void>((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = url;
+  });
+}
+
+function loadAssets(
   urls: string[],
   onEachComplete: () => void,
 ): Promise<void> {
   return Promise.all(
-    urls.map(
-      (src) =>
-        new Promise<void>((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            onEachComplete();
-            resolve();
-          };
-          img.onerror = () => {
-            onEachComplete();
-            resolve();
-          };
-          img.src = src;
-        }),
+    urls.map((src) =>
+      preloadOneAsset(src).then(() => {
+        onEachComplete();
+      }),
     ),
   ).then(() => {});
 }
@@ -74,7 +89,7 @@ export const preloadAssets = async (
     onProgress?.((finished / total) * 100);
   };
 
-  await loadImages(assets, bump);
+  await loadAssets(assets, bump);
 
   markAssetPreloadComplete();
 };
@@ -109,7 +124,7 @@ export async function preloadAssetPhases(
   };
 
   for (const phase of phases) {
-    await loadImages(phase, bump);
+    await loadAssets(phase, bump);
   }
 
   markAssetPreloadComplete();
@@ -121,7 +136,14 @@ export async function preloadAssetPhases(
  */
 export function warmSplashPriorityAssets(urls: string[]): void {
   for (const src of urls) {
-    const img = new Image();
-    img.src = src;
+    if (isLikelyAudioUrl(src)) {
+      const audio = new Audio();
+      audio.preload = "auto";
+      audio.src = src;
+      audio.load();
+    } else {
+      const img = new Image();
+      img.src = src;
+    }
   }
 }

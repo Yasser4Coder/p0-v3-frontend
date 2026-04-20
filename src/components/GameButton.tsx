@@ -59,6 +59,7 @@ export default function GameButton({
       <Link
         to={to}
         onClick={onClick}
+        data-p0-click-sfx=""
         className={`${outerClass} inline-flex ${widthClass} flex-col no-underline`}
         aria-current={ariaCurrent}
         aria-expanded={ariaExpanded}
@@ -73,6 +74,7 @@ export default function GameButton({
       type={type}
       form={form}
       onClick={onClick}
+      data-p0-click-sfx=""
       className={outerClass}
       aria-current={ariaCurrent}
       aria-expanded={ariaExpanded}

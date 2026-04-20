@@ -1,5 +1,6 @@
 import GameButton from "../components/GameButton";
 import Header from "../components/Header";
+import SplashIntroMusic from "../components/SplashIntroMusic";
 import {
   heavyAssetsAfterSplash,
   splashBg,
@@ -31,6 +32,7 @@ export default function Splash() {
       className="h-screen w-full bg-cover bg-center font-Shuriken"
       style={{ backgroundImage: `url(${splashBg})` }}
     >
+      <SplashIntroMusic />
       <div className="pt-10">
         <Header />
       </div>
