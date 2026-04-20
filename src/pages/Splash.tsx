@@ -1,8 +1,13 @@
 import GameButton from "../components/GameButton";
 import Header from "../components/Header";
-import { heavyAssets, splashBg, splashGif } from "../assets/assets";
+import {
+  heavyAssetsAfterSplash,
+  splashBg,
+  splashGif,
+  splashPriorityAssets,
+} from "../assets/assets";
 import { useEffect, useState } from "react";
-import { preloadAssets } from "../utils/preloadAssets";
+import { preloadAssetPhases } from "../utils/preloadAssets";
 
 export default function Splash() {
   const [ready, setReady] = useState(false);
@@ -10,7 +15,13 @@ export default function Splash() {
 
   useEffect(() => {
     const loadResources = async () => {
-      await preloadAssets(heavyAssets, setProgress);
+      await preloadAssetPhases(
+        [splashPriorityAssets, heavyAssetsAfterSplash],
+        {
+          onProgress: setProgress,
+          skipIfAlreadyLoaded: true,
+        },
+      );
       setReady(true);
     };
     loadResources();

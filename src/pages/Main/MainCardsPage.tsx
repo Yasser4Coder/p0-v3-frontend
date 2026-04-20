@@ -240,6 +240,8 @@ export default function MainCardsPage() {
                       alt=""
                       className="pointer-events-auto block aspect-[5/7] h-auto w-full object-contain"
                       draggable={false}
+                      loading="lazy"
+                      decoding="async"
                       onLoad={() => {
                         const g = gridRef.current;
                         if (!g) return;

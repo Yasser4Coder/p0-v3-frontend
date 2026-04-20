@@ -1,9 +1,6 @@
-import headerBg from "./HeaderBg.svg";
 import loginBg from "./loginbg.png";
 import welcomeBg from "./welcomeBg.png";
 import loginGif from "./gif/loginGif.gif";
-import splashGif from "./gif/splashScreenGif.gif";
-import splashBg from "./splashScreenBg.png";
 import Map from "./Map.png";
 import manCS from "./avatars/man-cs.png";
 import womanCS from "./avatars/woman-cs.png";
@@ -32,10 +29,19 @@ import mainTimerBg from "./TimerBg.png";
 import bookImg from "./book.png";
 import backOfCard from "./backOfCard.png";
 
-export const heavyAssets = [
+import { splashCriticalAssets } from "./splashCritical";
+
+export {
   splashGif,
-  headerBg,
   splashBg,
+  headerBg,
+  splashCriticalAssets,
+  splashPublicAssets,
+  splashPriorityAssets,
+} from "./splashCritical";
+
+export const heavyAssets = [
+  ...splashCriticalAssets,
   welcomeBg,
   loginBg,
   loginGif,
@@ -66,10 +72,12 @@ export const heavyAssets = [
   backOfCard,
 ];
 
+/** Preload queue after splash-critical URLs (same strings as in `heavyAssets`, minus splash trio). */
+export const heavyAssetsAfterSplash = heavyAssets.filter(
+  (url) => !splashCriticalAssets.includes(url),
+);
+
 export {
-  splashGif,
-  splashBg,
-  headerBg,
   welcomeBg,
   loginBg,
   loginGif,

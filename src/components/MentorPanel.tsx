@@ -83,7 +83,13 @@ function MentorRow({ label, color, avatar, logo }: MentorRowConfig) {
         className="relative z-20 h-12 w-11 shrink-0 overflow-hidden rounded-sm border sm:h-14 sm:w-12 md:h-16 md:w-14 [@media(max-height:520px)]:h-9 [@media(max-height:520px)]:w-8"
         style={{ borderColor: `${color}aa` }}
       >
-        <img src={avatar} alt="" className="h-full w-full object-cover" />
+        <img
+          src={avatar}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
+        />
       </div>
 
       <div className="relative flex min-h-12 min-w-0 flex-1 items-center justify-center sm:min-h-14 [@media(max-height:520px)]:min-h-8">
@@ -108,7 +114,13 @@ function MentorRow({ label, color, avatar, logo }: MentorRowConfig) {
           boxShadow: `0 0 16px ${color}66`,
         }}
       >
-        <img src={logo} alt="" className="h-full w-full object-contain p-1" />
+        <img
+          src={logo}
+          alt=""
+          className="h-full w-full object-contain p-1"
+          loading="lazy"
+          decoding="async"
+        />
       </div>
     </div>
   );

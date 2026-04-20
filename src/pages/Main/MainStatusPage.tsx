@@ -16,6 +16,8 @@ function StatRow({ logo, label, value }: StatRowProps) {
         src={logo}
         alt=""
         className="h-8 w-8 shrink-0 object-contain md:h-9 md:w-9"
+        loading="lazy"
+        decoding="async"
       />
       <span
         className="font-Shuriken text-xs font-bold tracking-[0.2em] text-white md:text-sm"
