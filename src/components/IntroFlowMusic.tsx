@@ -1,14 +1,41 @@
 import { Volume2, VolumeX } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { splashIntroMusic } from "../assets/splashCritical";
 
 const MUTE_STORAGE_KEY = "p0-splash-intro-muted";
 
+/** Routes where the Hunter × Hunter intro plays as one continuous session. */
+const INTRO_FLOW_PATHS = new Set(["/", "/welcome", "/login"]);
+
+function normalizeIntroPath(pathname: string): string {
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    return pathname.slice(0, -1);
+  }
+  return pathname || "/";
+}
+
+/** Survives React Strict Mode remounts and route changes — same timeline, no restart. */
+let sharedIntroAudio: HTMLAudioElement | null = null;
+
+function getSharedIntroAudio(): HTMLAudioElement {
+  if (!sharedIntroAudio) {
+    sharedIntroAudio = new Audio(splashIntroMusic);
+    sharedIntroAudio.loop = false;
+    sharedIntroAudio.preload = "auto";
+  }
+  return sharedIntroAudio;
+}
+
 /**
- * Splash-only intro track + bottom-left mute chip (mirrors `FullscreenCornerHint` styling).
+ * Intro track for splash → welcome → login (single playback). Mute chip matches fullscreen pill style.
  */
-export default function SplashIntroMusic() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+export default function IntroFlowMusic() {
+  const location = useLocation();
+  const inIntroFlow = INTRO_FLOW_PATHS.has(
+    normalizeIntroPath(location.pathname),
+  );
+
   const [muted, setMuted] = useState(() => {
     try {
       return localStorage.getItem(MUTE_STORAGE_KEY) === "1";
@@ -19,34 +46,7 @@ export default function SplashIntroMusic() {
   const [autoPlayBlocked, setAutoPlayBlocked] = useState(false);
 
   useEffect(() => {
-    const audio = new Audio(splashIntroMusic);
-    audio.loop = false;
-    audio.preload = "auto";
-    audioRef.current = audio;
-
-    const tryPlay = async () => {
-      try {
-        await audio.play();
-        setAutoPlayBlocked(false);
-      } catch {
-        setAutoPlayBlocked(true);
-      }
-    };
-
-    audio.addEventListener("canplay", () => void tryPlay(), { once: true });
-    audio.load();
-
-    return () => {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-      audioRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    const audio = getSharedIntroAudio();
     audio.muted = muted;
     audio.volume = muted ? 0 : 0.48;
     try {
@@ -56,21 +56,50 @@ export default function SplashIntroMusic() {
     }
   }, [muted]);
 
+  useEffect(() => {
+    const audio = getSharedIntroAudio();
+    const inFlow = INTRO_FLOW_PATHS.has(
+      normalizeIntroPath(location.pathname),
+    );
+
+    if (!inFlow) {
+      audio.pause();
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await audio.play();
+        if (!cancelled) setAutoPlayBlocked(false);
+      } catch {
+        if (!cancelled) setAutoPlayBlocked(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
   const resumePlayback = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    const audio = getSharedIntroAudio();
+    audio.muted = muted;
+    audio.volume = muted ? 0 : 0.48;
     void audio.play().then(() => setAutoPlayBlocked(false)).catch(() => {});
-  }, []);
+  }, [muted]);
 
   useEffect(() => {
-    if (!autoPlayBlocked) return;
+    if (!autoPlayBlocked || !inIntroFlow) return;
     const onFirstGesture = () => {
       resumePlayback();
       document.removeEventListener("pointerdown", onFirstGesture);
     };
     document.addEventListener("pointerdown", onFirstGesture);
     return () => document.removeEventListener("pointerdown", onFirstGesture);
-  }, [autoPlayBlocked, resumePlayback]);
+  }, [autoPlayBlocked, inIntroFlow, resumePlayback]);
+
+  if (!inIntroFlow) return null;
 
   return (
     <div
