@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   logoAI,
   logoCS,
@@ -11,20 +11,47 @@ import {
   manPS,
   manUX,
 } from "../assets/assets";
-
-type MentorRowConfig = {
-  label: string;
-  color: string;
-  avatar: string;
-  logo: string;
-};
+import MentorMessageModal, {
+  type MentorMessagePayload,
+} from "./MentorMessageModal";
+import type { MentorRowConfig } from "./mentorTypes";
 
 const MENTOR_ROWS: MentorRowConfig[] = [
-  { label: "DEV MENTOR", color: "#138F00", avatar: manCS, logo: logoCS },
-  { label: "PROBLEM SOLVING", color: "#B81212", avatar: manPS, logo: logoPS },
-  { label: "AI", color: "#1294B8", avatar: manAI, logo: logoAI },
-  { label: "UIUX", color: "#8F097B", avatar: manUX, logo: logoUX },
-  { label: "DESIGN MENTOR", color: "#B88412", avatar: manGD, logo: logoGD },
+  {
+    id: "cs",
+    label: "DEV MENTOR",
+    color: "#138F00",
+    avatar: manCS,
+    logo: logoCS,
+  },
+  {
+    id: "ps",
+    label: "PROBLEM SOLVING",
+    color: "#B81212",
+    avatar: manPS,
+    logo: logoPS,
+  },
+  {
+    id: "ai",
+    label: "AI",
+    color: "#1294B8",
+    avatar: manAI,
+    logo: logoAI,
+  },
+  {
+    id: "ux",
+    label: "UIUX",
+    color: "#8F097B",
+    avatar: manUX,
+    logo: logoUX,
+  },
+  {
+    id: "gd",
+    label: "DESIGN MENTOR",
+    color: "#B88412",
+    avatar: manGD,
+    logo: logoGD,
+  },
 ];
 
 /** Diagonal accent strips (same geometry as dashboard `Header` center). */
@@ -76,9 +103,30 @@ function DiagonalBars({ color }: { color: string }) {
   );
 }
 
-function MentorRow({ label, color, avatar, logo }: MentorRowConfig) {
+function MentorRow({
+  row,
+  onPick,
+}: {
+  row: MentorRowConfig;
+  onPick: (row: MentorRowConfig) => void;
+}) {
+  const { label, color, avatar, logo } = row;
+
+  const activate = () => onPick(row);
+
   return (
-    <div className="relative flex w-full cursor-pointer items-center gap-2 overflow-hidden py-2 my-4 sm:gap-3 sm:py-3 md:gap-4 [@media(max-height:520px)]:my-1 [@media(max-height:520px)]:gap-1.5 [@media(max-height:520px)]:py-1">
+    <div
+      role="button"
+      tabIndex={0}
+      className="relative my-4 flex w-full cursor-pointer items-center gap-2 overflow-hidden py-2 outline-none ring-offset-black transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-white/70 sm:my-4 sm:gap-3 sm:py-3 md:gap-4 [@media(max-height:520px)]:my-1 [@media(max-height:520px)]:gap-1.5 [@media(max-height:520px)]:py-1"
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          activate();
+        }
+      }}
+    >
       <div
         className="relative z-20 h-12 w-11 shrink-0 overflow-hidden rounded-sm border sm:h-14 sm:w-12 md:h-16 md:w-14 [@media(max-height:520px)]:h-9 [@media(max-height:520px)]:w-8"
         style={{ borderColor: `${color}aa` }}
@@ -128,35 +176,58 @@ function MentorRow({ label, color, avatar, logo }: MentorRowConfig) {
 
 type MentorPanelProps = {
   onClose: () => void;
+  onSendMentorMessage?: (payload: MentorMessagePayload) => void;
 };
 
 /** Mentor picker overlay content (backdrop is handled by parent). */
-export default function MentorPanel({ onClose }: MentorPanelProps) {
+export default function MentorPanel({
+  onClose,
+  onSendMentorMessage,
+}: MentorPanelProps) {
+  const [messageMentor, setMessageMentor] = useState<MentorRowConfig | null>(
+    null,
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (messageMentor) {
+        setMessageMentor(null);
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, messageMentor]);
 
   return (
-    <div
-      className="rounded-xl border border-white/15 bg-black/75 px-3 py-4 shadow-[0_16px_48px_rgba(0,0,0,0.55)] backdrop-blur-md sm:px-5 sm:py-5 md:px-6 [@media(max-height:520px)]:rounded-lg [@media(max-height:520px)]:px-2.5 [@media(max-height:520px)]:py-2"
-      onClick={(e) => e.stopPropagation()}
-      onPointerDown={(e) => e.stopPropagation()}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="mentor-panel-title"
-    >
-      <h2 id="mentor-panel-title" className="sr-only">
-        Choose a mentor domain
-      </h2>
-      <div className="flex flex-col divide-y divide-white/10">
-        {MENTOR_ROWS.map((row) => (
-          <MentorRow key={row.label} {...row} />
-        ))}
+    <>
+      <div
+        className="rounded-xl border border-white/15 bg-black/75 px-3 py-4 shadow-[0_16px_48px_rgba(0,0,0,0.55)] backdrop-blur-md sm:px-5 sm:py-5 md:px-6 [@media(max-height:520px)]:rounded-lg [@media(max-height:520px)]:px-2.5 [@media(max-height:520px)]:py-2"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mentor-panel-title"
+      >
+        <h2 id="mentor-panel-title" className="sr-only">
+          Choose a mentor domain
+        </h2>
+        <div className="flex flex-col divide-y divide-white/10">
+          {MENTOR_ROWS.map((row) => (
+            <MentorRow key={row.id} row={row} onPick={setMessageMentor} />
+          ))}
+        </div>
       </div>
-    </div>
+
+      {messageMentor ? (
+        <MentorMessageModal
+          mentor={messageMentor}
+          onClose={() => setMessageMentor(null)}
+          onSend={onSendMentorMessage}
+        />
+      ) : null}
+    </>
   );
 }
