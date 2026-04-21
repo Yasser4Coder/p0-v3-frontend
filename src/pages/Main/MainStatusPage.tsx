@@ -1,6 +1,10 @@
+import { useEffect, useState } from "react";
 import { logoAI, logoCS, logoGD, logoPS, logoUX } from "../../assets/assets";
 import BrandedShell from "../../components/BrandedShell";
 import { motion } from "framer-motion";
+import { getMe } from "../../lib/auth/api";
+import { getAuthUser } from "../../lib/auth/storage";
+import { getMyTeamStats } from "../../lib/teams/api";
 
 const glow =
   "0 0 8px rgba(255,255,255,0.75), 0 0 20px rgba(255,255,255,0.28)";
@@ -37,6 +41,37 @@ function StatRow({ logo, label, value }: StatRowProps) {
 
 /** `/main/status` — profile / team status (no map). */
 export default function MainStatusPage() {
+  const [userName, setUserName] = useState(
+    () => getAuthUser()?.name ?? "—",
+  );
+  const [rank, setRank] = useState<string>("—");
+  const [teamName, setTeamName] = useState<string>("—");
+  const [totalScore, setTotalScore] = useState<string>("—");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [me, stats] = await Promise.all([getMe(), getMyTeamStats()]);
+        if (cancelled) return;
+        setUserName(me.name);
+        setRank(String(stats.rank));
+        setTeamName(stats.team_name);
+        setTotalScore(String(stats.total_score));
+      } catch {
+        if (!cancelled) {
+          setUserName(getAuthUser()?.name ?? "—");
+          setRank("—");
+          setTeamName("—");
+          setTotalScore("—");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <motion.div
       className="flex min-h-[min(52vh,520px)] w-full min-w-0 flex-1 flex-col"
@@ -59,7 +94,7 @@ export default function MainStatusPage() {
             className="mt-1 font-Shuriken text-xs font-bold tracking-[0.35em] text-white/95 md:text-sm"
             style={{ textShadow: glow }}
           >
-            ELEC TEAM
+            {teamName === "—" ? "—" : `${teamName} TEAM`}
           </p>
 
           <div className="mt-6 flex w-full max-w-2xl flex-col items-stretch justify-between gap-5 sm:flex-row sm:items-start md:mt-8">
@@ -68,7 +103,7 @@ export default function MainStatusPage() {
                 className="font-Shuriken text-4xl font-black leading-none text-white md:text-5xl"
                 style={{ textShadow: glowStrong }}
               >
-                12
+                {rank}
               </span>
               <span
                 className="mt-1 font-Shuriken text-[0.65rem] font-bold tracking-[0.35em] text-white/90 md:text-xs"
@@ -82,13 +117,13 @@ export default function MainStatusPage() {
                 className="font-Shuriken text-xs font-bold tracking-[0.15em] text-white md:text-sm"
                 style={{ textShadow: glow }}
               >
-                name: KHALIL
+                name: {userName}
               </p>
               <p
                 className="font-Shuriken text-xs font-bold tracking-[0.14em] text-white/95 md:text-sm"
                 style={{ textShadow: glow }}
               >
-                TEAM DCROWLERS
+                TEAM {teamName}
               </p>
             </div>
           </div>
@@ -121,7 +156,7 @@ export default function MainStatusPage() {
                 className="font-Shuriken text-3xl font-black tabular-nums text-white md:text-4xl"
                 style={{ textShadow: glowStrong }}
               >
-                250
+                {totalScore}
               </span>
             </div>
           </div>

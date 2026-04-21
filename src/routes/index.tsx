@@ -11,6 +11,7 @@ import MainStatusPage from "../pages/Main/MainStatusPage";
 import MainTimerPage from "../pages/Main/MainTimerPage";
 import Splash from "../pages/Splash";
 import Welcome from "../pages/Welcome";
+import RequireAuth from "./RequireAuth";
 
 export default function AppRoutes() {
   return (
@@ -18,10 +19,24 @@ export default function AppRoutes() {
       <Route path="/" element={<Splash />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/welcome" element={<Welcome />} />
-      <Route path="/challenge" element={<ChallengeLayout />}>
+      <Route
+        path="/challenge"
+        element={
+          <RequireAuth>
+            <ChallengeLayout />
+          </RequireAuth>
+        }
+      >
         <Route index element={<MainChallengePage />} />
       </Route>
-      <Route path="/main" element={<MainLayout />}>
+      <Route
+        path="/main"
+        element={
+          <RequireAuth>
+            <MainLayout />
+          </RequireAuth>
+        }
+      >
         <Route index element={<MainHomePage />} />
         <Route path="status" element={<MainStatusPage />} />
         <Route path="cards" element={<MainCardsPage />} />

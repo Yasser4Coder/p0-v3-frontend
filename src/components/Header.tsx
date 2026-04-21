@@ -1,9 +1,12 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { headerBg, logoCS, manCS } from "../assets/assets";
 import GameButton from "./GameButton";
 import {
   HEADER_LOGO_ID,
   useHeaderLogoSuppressed,
 } from "../contexts/WelcomeLoginTransitionContext";
+import { logout } from "../lib/auth/api";
 
 export type HeaderProps = {
   variant?: "default" | "dashboard";
@@ -19,6 +22,19 @@ const Header = ({
   userAvatarUrl,
 }: HeaderProps) => {
   const logoSuppressed = useHeaderLogoSuppressed();
+  const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      navigate("/login", { replace: true });
+      setIsLoggingOut(false);
+    }
+  };
 
   if (variant === "dashboard") {
     return (
@@ -80,6 +96,18 @@ const Header = ({
             >
               <img src={logoCS} alt="CS" className="h-full w-full object-cover" />
             </div>
+
+            <GameButton
+              type="button"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="relative z-30 h-10 shrink-0 p-1! md:h-15 [&>div]:h-full! [&>div]:min-h-0! [&>div]:px-4! md:[&>div]:px-5!"
+              outerBgClass="bg-[#000A03]"
+              bgClass="!rounded-sm !border-[#333B36] !bg-[#B52B2B]/15 hover:!bg-[#B52B2B]/25"
+              fontClass="font-Shuriken !px-0 !py-0 text-xs font-bold uppercase tracking-[0.22em] text-white md:text-sm"
+            >
+              {isLoggingOut ? "LOGGING OUT..." : "LOGOUT"}
+            </GameButton>
           </div>
 
           <img

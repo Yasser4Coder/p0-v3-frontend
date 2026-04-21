@@ -1,8 +1,11 @@
 import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import type { Location } from "react-router-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { loginBg } from "../../assets/assets";
+import { ApiError } from "../../lib/api/errors";
+import { login } from "../../lib/auth/api";
 import {
   LOGIN_ITEM_ENTER_S,
   LOGIN_PAGE_FADE_S,
@@ -22,13 +25,16 @@ const LOGIN_FORM_ID = "login-form";
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const redirectTo =
+    (location.state as { from?: Location } | null)?.from?.pathname ?? "/main";
   const fromWelcomeTransition = Boolean(
     (location.state as { fromWelcomeTransition?: boolean } | null)
       ?.fromWelcomeTransition,
   );
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { container, item, pageTransition } = useMemo(() => {
     const gap = fromWelcomeTransition
@@ -70,14 +76,40 @@ export default function LoginPage() {
     };
   }, [fromWelcomeTransition]);
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const getReadableLoginError = (err: unknown) => {
+    if (err instanceof ApiError) {
+      // Prefer backend-provided message when it exists and is meaningful.
+      if (err.kind === "unauthorized") return err.message || "Invalid email or password.";
+      if (err.kind === "forbidden")
+        return "You don’t have permission to access this account.";
+      if (err.kind === "timeout") return "Login is taking too long. Please try again.";
+      if (err.kind === "network")
+        return "Can’t reach the server. Check your internet connection and try again.";
+      if (err.kind === "server") return "Server error. Please try again in a moment.";
+      if (err.kind === "bad_request") return err.message || "Please check your input and try again.";
+      return err.message || "Login failed. Please try again.";
+    }
+    return "Login failed. Please try again.";
+  };
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
-    if (!username.trim() || !password) {
-      setError("Enter username and password.");
+    if (isSubmitting) return;
+    if (!email.trim() || !password) {
+      setError("Enter email and password.");
       return;
     }
-    navigate("/welcome");
+
+    setIsSubmitting(true);
+    try {
+      await login({ email: email.trim(), password });
+      navigate(redirectTo, { replace: true });
+    } catch (err) {
+      setError(getReadableLoginError(err));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const inputClass =
@@ -130,18 +162,18 @@ export default function LoginPage() {
 
               <motion.div variants={item} className="mt-8 w-full max-w-md md:mt-10">
                 <label htmlFor="login-username" className="sr-only">
-                  Username
+                  Email
                 </label>
                 <input
-                  id="login-username"
+                  id="login-email"
                   form={LOGIN_FORM_ID}
-                  name="username"
-                  type="text"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className={inputClass}
-                  placeholder="Username"
+                  placeholder="Email"
                 />
               </motion.div>
 
@@ -164,9 +196,11 @@ export default function LoginPage() {
 
               {error ? (
                 <motion.p
-                  className="mt-1 w-full max-w-md text-sm text-red-300"
+                  className="mt-4 w-full max-w-md rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-200"
                   role="alert"
-                  variants={item}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18, ease: easeOut }}
                 >
                   {error}
                 </motion.p>
@@ -176,12 +210,13 @@ export default function LoginPage() {
                 <GameButton
                   type="submit"
                   form={LOGIN_FORM_ID}
+                  disabled={isSubmitting}
                   className="justify-center focus-visible:ring-offset-black/60 [&>div]:w-full [&>div]:py-3.5 [&>div]:text-center"
                   outerBgClass="bg-[#A38A51]"
                   bgClass="bg-[#333B36]/20 hover:bg-[#333B36]/30 !border !border-neutral-900"
                   fontClass="!rounded-none text-lg font-black uppercase tracking-[0.35em] text-black"
                 >
-                  Login
+                  {isSubmitting ? "Logging in..." : "Login"}
                 </GameButton>
               </motion.div>
             </motion.div>

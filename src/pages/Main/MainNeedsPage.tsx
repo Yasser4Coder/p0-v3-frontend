@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { needsPanelBg } from "../../assets/assets";
 import BrandedShell from "../../components/BrandedShell";
 import GameButton from "../../components/GameButton";
 import { motion } from "framer-motion";
+import { ApiError } from "../../lib/api/errors";
+import { getMe } from "../../lib/auth/api";
+import { createNeed } from "../../lib/needs/api";
 
 const GOLD = "#C5A059";
 const headlineGlow =
@@ -10,7 +13,81 @@ const headlineGlow =
 
 /** `/main/needs` — light outer glass (BrandedShell) + darker inner glass panel. */
 export default function MainNeedsPage() {
-  const [text, setText] = useState("");
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState<"mentor" | "help" | "member" | "other">(
+    "help",
+  );
+  const [description, setDescription] = useState("");
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const [error, setError] = useState<string>("");
+  const [success, setSuccess] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await getMe();
+        const tid =
+          typeof me.team_id === "number" ? String(me.team_id) : null;
+        if (!cancelled) setTeamId(tid);
+      } catch (err) {
+        // Protected routes handle redirect already; page should just be resilient.
+        if (!cancelled) {
+          const msg =
+            err instanceof ApiError
+              ? err.message
+              : "Could not load your profile.";
+          setError(msg);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const canSubmit = useMemo(() => {
+    return Boolean(title.trim() && type && teamId && !isSubmitting);
+  }, [title, type, teamId, isSubmitting]);
+
+  const handleSend = async () => {
+    setError("");
+    setSuccess("");
+    if (!teamId) {
+      setError("Could not find your team. Please re-login.");
+      return;
+    }
+    if (!title.trim()) {
+      setError("Please enter a title.");
+      return;
+    }
+    if (!type) {
+      setError("Please choose a type.");
+      return;
+    }
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      await createNeed({
+        title: title.trim(),
+        type,
+        team_id: teamId,
+        description: description.trim() ? description.trim() : undefined,
+      });
+      setSuccess("Sent successfully.");
+      setTitle("");
+      setDescription("");
+      setType("help");
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to send. Please try again.";
+      setError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <motion.div
@@ -65,9 +142,49 @@ export default function MainNeedsPage() {
               needs
             </h2>
 
+            <div className="mt-4 grid grid-cols-1 gap-4 md:mt-5 md:grid-cols-2">
+              <div className="min-w-0">
+                <label
+                  htmlFor="need-title"
+                  className="block font-Shuriken text-[0.7rem] font-black tracking-[0.28em] text-white/85"
+                >
+                  TITLE
+                </label>
+                <input
+                  id="need-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-white/14 bg-black/35 px-4 py-3 font-Shuriken text-sm normal-case tracking-normal text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md placeholder:text-white/30 focus:border-[#76AF72]/45 focus:outline-none focus:ring-2 focus:ring-[#76AF72]/25 md:px-5 md:py-4"
+                  placeholder="Short title"
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label
+                  htmlFor="need-priority"
+                  className="block font-Shuriken text-[0.7rem] font-black tracking-[0.28em] text-white/85"
+                >
+                  TYPE
+                </label>
+                <select
+                  id="need-priority"
+                  value={type}
+                  onChange={(e) =>
+                    setType(e.target.value as typeof type)
+                  }
+                  className="mt-2 w-full rounded-xl border border-white/14 bg-black/35 px-4 py-3 font-Shuriken text-sm tracking-[0.15em] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md focus:border-[#76AF72]/45 focus:outline-none focus:ring-2 focus:ring-[#76AF72]/25 md:px-5 md:py-4"
+                >
+                  <option value="mentor">MENTOR</option>
+                  <option value="help">HELP</option>
+                  <option value="member">MEMBER</option>
+                  <option value="other">OTHER</option>
+                </select>
+              </div>
+            </div>
+
             <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
               rows={6}
               className="mt-4 min-h-[180px] w-full flex-1 resize-y rounded-xl border border-white/14 bg-black/35 px-4 py-3 font-Shuriken text-sm normal-case tracking-normal text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md placeholder:text-white/30 focus:border-[#76AF72]/45 focus:outline-none focus:ring-2 focus:ring-[#76AF72]/25 md:mt-5 md:min-h-[220px] md:px-5 md:py-4 md:text-base"
               style={{
@@ -75,18 +192,39 @@ export default function MainNeedsPage() {
                   "inset 0 0 0 1px rgba(118, 175, 114, 0.22)",
               }}
               spellCheck={false}
+              placeholder="Description (optional)"
             />
+
+            {error ? (
+              <p
+                className="mt-3 rounded-xl border border-red-500/25 bg-red-950/30 px-4 py-3 font-Shuriken text-xs normal-case tracking-normal text-red-200"
+                role="alert"
+              >
+                {error}
+              </p>
+            ) : null}
+
+            {success ? (
+              <p
+                className="mt-3 rounded-xl border border-emerald-500/25 bg-emerald-950/25 px-4 py-3 font-Shuriken text-xs normal-case tracking-normal text-emerald-200"
+                role="status"
+              >
+                {success}
+              </p>
+            ) : null}
 
             <div className="mt-6 flex shrink-0 justify-center md:mt-8">
               <GameButton
-                to="/main"
+                type="button"
+                onClick={handleSend}
+                disabled={!canSubmit}
                 fullWidth={false}
                 className="shrink-0"
                 outerBgClass="bg-[#C5A059]"
                 bgClass="!rounded-md border !border-[#333B36] bg-[#C5A059] !px-12 !py-3 hover:bg-[#b8924f]"
                 fontClass="font-Shuriken text-xs font-black tracking-[0.4em] text-black md:text-sm"
               >
-                SEND
+                {isSubmitting ? "SENDING..." : "SEND"}
               </GameButton>
             </div>
           </div>

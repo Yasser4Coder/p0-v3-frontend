@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import BrandedShell from "../../components/BrandedShell";
 import { useScoreboardTeams } from "../../hooks/useScoreboardTeams";
 import ScoreBoardTeams from "./scoreboard/ScoreBoardTeams";
+import { getMe } from "../../lib/auth/api";
+import { getAuthUser } from "../../lib/auth/storage";
 
 const GOLD = "#C5A059";
 
@@ -11,8 +13,6 @@ const headlineGlow =
 
 const scoreboardTitleFrameGlow =
   "0 0 4px rgba(255,255,255,0.55), 0 0 12px rgba(255,255,255,0.28), 0 0 22px rgba(255,255,255,0.14)";
-
-const LS_TEAM = "teamName";
 
 function ordinal(n: number) {
   const mod10 = n % 10;
@@ -25,17 +25,31 @@ function ordinal(n: number) {
 
 /** `/main/score-board` — leaderboard + summary (BrandedShell, same glass pattern as Needs/Timer). */
 export default function MainScoreBoardPage() {
-  const myTeamName = useMemo(
-    () => localStorage.getItem(LS_TEAM) ?? "ELEC TEAM",
-    [],
+  const [myTeamName, setMyTeamName] = useState(
+    () => getAuthUser()?.team_name ?? "YOUR TEAM",
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await getMe();
+        if (!cancelled && me.team_name) setMyTeamName(me.team_name);
+      } catch {
+        // Ignore; protected routes + other pages handle auth issues.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const { teams, loading, error } = useScoreboardTeams(myTeamName);
 
-  const rankIndex = teams.findIndex((t) => t.name === myTeamName);
-  const rank = rankIndex === -1 ? null : rankIndex + 1;
-  const points =
-    rankIndex === -1 ? null : teams[rankIndex]?.totalScore ?? null;
+  const myTeamIndex = teams.findIndex((t) => t.name === myTeamName);
+  const myRank = myTeamIndex === -1 ? null : myTeamIndex + 1;
+  const myPoints =
+    myTeamIndex === -1 ? null : teams[myTeamIndex]?.totalScore ?? null;
 
   return (
     <div className="flex w-full min-w-0 flex-1 flex-col">
@@ -76,22 +90,31 @@ export default function MainScoreBoardPage() {
                 className="max-w-lg px-2 text-center font-Shuriken text-xs font-bold normal-case leading-relaxed tracking-[0.08em] text-white/92 sm:text-sm md:text-base md:tracking-[0.12em]"
                 style={{ textShadow: headlineGlow }}
               >
-                {rank != null && points != null ? (
+                {loading && teams.length === 0 ? (
+                  <>Loading leaderboard…</>
+                ) : myRank != null && myPoints != null ? (
                   <>
                     Your team <span style={{ color: GOLD }}>{myTeamName}</span>{" "}
-                    is in the <span className="text-white">{ordinal(rank)}</span>{" "}
-                    place with{" "}
-                    <span className="tabular-nums text-white">{points}</span> points.
+                    TEAM is in the{" "}
+                    <span className="text-white">{ordinal(myRank)}</span> place
+                    with{" "}
+                    <span className="tabular-nums text-white">{myPoints}</span>{" "}
+                    points.
                   </>
                 ) : (
                   <>
                     Your team <span style={{ color: GOLD }}>{myTeamName}</span>{" "}
-                    is not on the board yet.
+                    TEAM is not on the leaderboard yet.
                   </>
                 )}
               </p>
 
-              <ScoreBoardTeams teams={teams} loading={loading} error={error} />
+              <ScoreBoardTeams
+                teams={teams}
+                loading={loading}
+                error={error}
+                currentTeamName={myTeamName}
+              />
             </motion.div>
           </div>
         </div>

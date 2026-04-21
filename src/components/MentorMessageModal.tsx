@@ -1,11 +1,17 @@
 import { motion } from "framer-motion";
 import { Send, X } from "lucide-react";
-import { useCallback, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import type { MentorId, MentorRowConfig } from "./mentorTypes";
+import { ApiError } from "../lib/api/errors";
+import { createNeed } from "../lib/needs/api";
+import { getMe } from "../lib/auth/api";
+import { getAuthUser } from "../lib/auth/storage";
+import { getTracks, type Track } from "../lib/tracks/api";
 
 export type MentorMessagePayload = {
   mentorId: MentorId;
   mentorLabel: string;
+  title: string;
   message: string;
 };
 
@@ -21,7 +27,7 @@ type Theme = {
 
 const THEMES: Record<MentorId, Theme> = {
   cs: {
-    headline: "Dev mentor",
+    headline: "CS mentor",
     accent: "#22c55e",
     soft: "#14532d",
     glow: "#4ade80",
@@ -52,10 +58,19 @@ const THEMES: Record<MentorId, Theme> = {
   },
 };
 
+/** Maps mentor row → track name as returned by GET /api/tracks */
+const MENTOR_TRACK_NAME: Record<MentorId, string> = {
+  cs: "CS",
+  ps: "PS",
+  ai: "AI",
+  ux: "UX",
+  gd: "GD",
+};
+
 type MentorMessageModalProps = {
   mentor: MentorRowConfig;
   onClose: () => void;
-  /** Optional hook for API integration later. */
+  /** Optional hook for analytics / extra handling after a successful send. */
   onSend?: (payload: MentorMessagePayload) => void;
 };
 
@@ -66,23 +81,96 @@ export default function MentorMessageModal({
 }: MentorMessageModalProps) {
   const titleId = useId();
   const descId = useId();
+  const inputId = useId();
   const [body, setBody] = useState("");
+  const [title, setTitle] = useState("");
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [tracksLoading, setTracksLoading] = useState(true);
+  const [tracks, setTracks] = useState<Track[] | null>(null);
 
   const theme = THEMES[mentor.id];
 
-  const handleSend = useCallback(() => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setTracksLoading(true);
+      setError("");
+      try {
+        const list = await getTracks();
+        if (!cancelled) setTracks(list);
+      } catch {
+        if (!cancelled) {
+          setTracks(null);
+          setError("Could not load tracks. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setTracksLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSend = useCallback(async () => {
+    const t = title.trim();
     const message = body.trim();
-    if (!message) return;
-    onSend?.({
-      mentorId: mentor.id,
-      mentorLabel: mentor.label,
-      message,
-    });
-    setSent(true);
-    setBody("");
-    window.setTimeout(() => setSent(false), 2600);
-  }, [body, mentor, onSend]);
+    if (!t || !message || isSending || tracksLoading || !tracks?.length) return;
+
+    setError("");
+    setIsSending(true);
+    try {
+      let teamId = getAuthUser()?.team_id;
+      if (teamId == null) {
+        const me = await getMe();
+        teamId = me.team_id;
+      }
+      if (teamId == null) {
+        throw new ApiError({
+          kind: "bad_request",
+          message: "Could not find your team. Please re-login.",
+        });
+      }
+
+      const wantName = MENTOR_TRACK_NAME[mentor.id].toUpperCase();
+      const track = tracks.find((tr) => tr.name.toUpperCase() === wantName);
+      if (!track) {
+        throw new ApiError({
+          kind: "bad_request",
+          message: `No track found for “${wantName}”.`,
+        });
+      }
+
+      await createNeed({
+        title: t,
+        description: message,
+        team_id: String(teamId),
+        track_id: String(track.id),
+        type: "mentor",
+      });
+
+      onSend?.({
+        mentorId: mentor.id,
+        mentorLabel: mentor.label,
+        title: t,
+        message,
+      });
+      setSent(true);
+      setTitle("");
+      setBody("");
+      window.setTimeout(() => setSent(false), 2600);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Could not send message. Please try again.";
+      setError(msg);
+    } finally {
+      setIsSending(false);
+    }
+  }, [title, body, mentor, onSend, isSending, tracksLoading, tracks]);
 
   return (
     <div
@@ -153,6 +241,21 @@ export default function MentorMessageModal({
             background: `linear-gradient(180deg, rgba(0,0,0,0.55) 0%, ${theme.soft}38 100%)`,
           }}
         >
+          <label htmlFor={inputId} className="sr-only">
+            Title for {theme.headline}
+          </label>
+          <input
+            id={inputId}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Message title…"
+            className="font-Shuriken w-full rounded-xl border bg-black/55 px-3 py-2.5 text-[13px] leading-relaxed tracking-wide text-white placeholder:text-white/35 focus:outline-none sm:px-4 sm:text-sm"
+            style={{
+              borderColor: `${theme.accent}66`,
+              boxShadow: `inset 0 0 24px ${theme.soft}33`,
+            }}
+          />
+
           <label htmlFor={`mentor-msg-${mentor.id}`} className="sr-only">
             Message to {theme.headline}
           </label>
@@ -169,6 +272,15 @@ export default function MentorMessageModal({
             }}
           />
 
+          {error ? (
+            <p
+              className="font-Shuriken rounded-lg border border-red-500/35 bg-red-950/35 px-3 py-2 text-center text-[11px] font-bold tracking-[0.08em] text-red-200 sm:text-xs"
+              role="alert"
+            >
+              {error}
+            </p>
+          ) : null}
+
           {sent ? (
             <p
               className="font-Shuriken rounded-lg border px-3 py-2 text-center text-[11px] font-bold tracking-[0.12em] text-white sm:text-xs"
@@ -179,7 +291,7 @@ export default function MentorMessageModal({
               }}
               role="status"
             >
-              Sent — thanks. We&apos;ll connect this to your squad feed soon.
+              Message sent.
             </p>
           ) : null}
 
@@ -193,8 +305,14 @@ export default function MentorMessageModal({
             </button>
             <button
               type="button"
-              onClick={handleSend}
-              disabled={!body.trim()}
+              onClick={() => void handleSend()}
+              disabled={
+                !title.trim() ||
+                !body.trim() ||
+                isSending ||
+                tracksLoading ||
+                !tracks?.length
+              }
               className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 font-Shuriken text-[11px] font-black tracking-[0.12em] text-black shadow-inner transition disabled:cursor-not-allowed disabled:opacity-45 sm:text-xs"
               style={{
                 borderColor: `${theme.accent}aa`,
@@ -203,7 +321,7 @@ export default function MentorMessageModal({
               }}
             >
               <Send className="h-4 w-4 shrink-0" strokeWidth={2.5} />
-              Send message
+              {isSending ? "Sending…" : "Send message"}
             </button>
           </div>
         </div>

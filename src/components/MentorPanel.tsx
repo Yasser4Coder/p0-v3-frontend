@@ -19,7 +19,7 @@ import type { MentorRowConfig } from "./mentorTypes";
 const MENTOR_ROWS: MentorRowConfig[] = [
   {
     id: "cs",
-    label: "DEV MENTOR",
+    label: "CS MENTOR",
     color: "#138F00",
     avatar: manCS,
     logo: logoCS,

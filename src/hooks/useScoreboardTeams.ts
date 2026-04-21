@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getScoreboardSocket } from "../lib/scoreboardSocket";
+import { apiClient } from "../lib/api/client";
+import { toApiError } from "../lib/api/errors";
 import type { ScoreboardTeam } from "../types/scoreboard";
 
 const DEMO_TEAMS: ScoreboardTeam[] = [
@@ -10,62 +12,58 @@ const DEMO_TEAMS: ScoreboardTeam[] = [
   { _id: "5", name: "VOID RUNNERS", totalScore: 265 },
 ];
 
-function sortTeams(list: ScoreboardTeam[]) {
-  return [...list].sort((a, b) => b.totalScore - a.totalScore);
-}
+type TeamLeaderboardResponse =
+  | {
+      success: true;
+      message: string;
+      data: Array<{
+        id: number;
+        name: string;
+        members_count: number;
+        track_name: string | null;
+        total_score: string;
+      }>;
+    }
+  | { success: false; message: string; data: null };
 
-function syncLocalRank(sorted: ScoreboardTeam[], myTeamName: string) {
-  const idx = sorted.findIndex((t) => t.name === myTeamName);
-  if (idx !== -1) {
-    localStorage.setItem("teamRank", String(idx + 1));
-    localStorage.setItem("teamPoints", String(sorted[idx].totalScore));
-  }
-}
-
-export function useScoreboardTeams(myTeamName: string) {
-  const apiBase = import.meta.env.VITE_API_URL?.replace(/\/$/, "") ?? "";
-
-  const [teams, setTeams] = useState<ScoreboardTeam[]>(() =>
-    apiBase ? [] : sortTeams(DEMO_TEAMS),
-  );
-  const [loading, setLoading] = useState(() => Boolean(apiBase));
+export function useScoreboardTeams(_myTeamName: string) {
+  const [teams, setTeams] = useState<ScoreboardTeam[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const applySorted = useCallback((next: ScoreboardTeam[]) => {
-    const sorted = sortTeams(next);
-    setTeams(sorted);
-    return sorted;
+  const applyServerOrder = useCallback((next: ScoreboardTeam[]) => {
+    setTeams(next);
+    return next;
   }, []);
 
   useEffect(() => {
-    if (!apiBase) return;
-
     let cancelled = false;
-    const base = apiBase;
 
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${base}/teams`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as unknown;
-        const list = Array.isArray(data) ? data : (data as { teams?: ScoreboardTeam[] }).teams;
-        if (!Array.isArray(list) || !list.length) {
-          if (!cancelled) applySorted(DEMO_TEAMS);
-        } else {
-          const normalized: ScoreboardTeam[] = list.map((t: ScoreboardTeam) => ({
-            _id: t._id ?? t.id,
-            id: t.id ?? t._id,
-            name: t.name,
-            totalScore: Number(t.totalScore) || 0,
-          }));
-          if (!cancelled) applySorted(normalized);
+        const res = await apiClient.get<TeamLeaderboardResponse>(
+          "/api/leaderboard/teams",
+        );
+        const payload = res.data;
+
+        if (!payload?.success || !Array.isArray(payload.data)) {
+          throw new Error(payload?.message ?? "Could not load teams.");
         }
-      } catch {
+
+        const normalized: ScoreboardTeam[] = payload.data.map((t) => ({
+          id: String(t.id),
+          name: t.name,
+          totalScore: Number(t.total_score) || 0,
+        }));
+
+        if (!cancelled) applyServerOrder(normalized);
+      } catch (e) {
+        const msg = toApiError(e).message;
         if (!cancelled) {
-          setError("Could not load teams; showing demo data.");
-          applySorted(DEMO_TEAMS);
+          setError(msg);
+          applyServerOrder(DEMO_TEAMS);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -76,7 +74,7 @@ export function useScoreboardTeams(myTeamName: string) {
     return () => {
       cancelled = true;
     };
-  }, [apiBase, applySorted]);
+  }, [applyServerOrder]);
 
   useEffect(() => {
     const s = getScoreboardSocket();
@@ -98,7 +96,8 @@ export function useScoreboardTeams(myTeamName: string) {
             totalScore: Number(updatedTeam.totalScore) || 0,
           });
         }
-        return sortTeams(copy);
+        // Keep server ordering as much as possible; append new teams to the end.
+        return copy;
       });
     };
 
@@ -107,10 +106,6 @@ export function useScoreboardTeams(myTeamName: string) {
       s.off("teams:update", onUpdate);
     };
   }, []);
-
-  useEffect(() => {
-    if (teams.length) syncLocalRank(teams, myTeamName);
-  }, [teams, myTeamName]);
 
   return { teams, loading, error };
 }

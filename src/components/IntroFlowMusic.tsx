@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { splashIntroMusic } from "../assets/splashCritical";
 
 const MUTE_STORAGE_KEY = "p0-splash-intro-muted";
+const INTRO_DEFAULT_VOLUME = 0.2;
 
 /** Routes where the Hunter × Hunter intro plays as one continuous session. */
 const INTRO_FLOW_PATHS = new Set(["/", "/welcome", "/login"]);
@@ -21,7 +22,7 @@ let sharedIntroAudio: HTMLAudioElement | null = null;
 function getSharedIntroAudio(): HTMLAudioElement {
   if (!sharedIntroAudio) {
     sharedIntroAudio = new Audio(splashIntroMusic);
-    sharedIntroAudio.loop = false;
+    sharedIntroAudio.loop = true;
     sharedIntroAudio.preload = "auto";
   }
   return sharedIntroAudio;
@@ -48,7 +49,7 @@ export default function IntroFlowMusic() {
   useEffect(() => {
     const audio = getSharedIntroAudio();
     audio.muted = muted;
-    audio.volume = muted ? 0 : 0.48;
+    audio.volume = muted ? 0 : INTRO_DEFAULT_VOLUME;
     try {
       localStorage.setItem(MUTE_STORAGE_KEY, muted ? "1" : "0");
     } catch {
@@ -85,7 +86,7 @@ export default function IntroFlowMusic() {
   const resumePlayback = useCallback(() => {
     const audio = getSharedIntroAudio();
     audio.muted = muted;
-    audio.volume = muted ? 0 : 0.48;
+    audio.volume = muted ? 0 : INTRO_DEFAULT_VOLUME;
     void audio.play().then(() => setAutoPlayBlocked(false)).catch(() => {});
   }, [muted]);
 

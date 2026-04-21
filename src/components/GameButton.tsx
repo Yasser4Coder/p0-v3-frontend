@@ -7,6 +7,7 @@ type GameButtonProps = {
   to?: string;
   onClick?: () => void;
   type?: "button" | "submit" | "reset";
+  disabled?: boolean;
   /** Associate submit with a `<form id="...">` outside the button tree. */
   form?: string;
   /** Classes on the outer `<button>` / `<a>` (e.g. `mt-8`). */
@@ -27,13 +28,14 @@ const outerBase =
   "p-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent";
 
 const innerBase =
-  "flex items-center justify-center text-center px-10 cursor-pointer py-3 rounded-sm border border-white transition-colors";
+  "flex items-center justify-center text-center px-10 py-3 rounded-sm border border-white transition-colors";
 
 export default function GameButton({
   children,
   to,
   onClick,
   type = "button",
+  disabled = false,
   form,
   className,
   fullWidth = true,
@@ -44,9 +46,13 @@ export default function GameButton({
   "aria-expanded": ariaExpanded,
 }: GameButtonProps) {
   const outerClass = [outerBase, outerBgClass, className].filter(Boolean).join(" ");
+  const disabledOuterClass = disabled ? "opacity-60 pointer-events-none" : "";
+  const disabledInnerClass = disabled ? "cursor-not-allowed" : "cursor-pointer";
   const inner = (
     <div
-      className={[innerBase, bgClass, fontClass].filter(Boolean).join(" ")}
+      className={[innerBase, bgClass, fontClass, disabledInnerClass]
+        .filter(Boolean)
+        .join(" ")}
     >
       {children}
     </div>
@@ -60,9 +66,10 @@ export default function GameButton({
         to={to}
         onClick={onClick}
         data-p0-click-sfx=""
-        className={`${outerClass} inline-flex ${widthClass} flex-col no-underline`}
+        className={`${outerClass} ${disabledOuterClass} inline-flex ${widthClass} flex-col no-underline`}
         aria-current={ariaCurrent}
         aria-expanded={ariaExpanded}
+        aria-disabled={disabled}
       >
         {inner}
       </Link>
@@ -74,8 +81,9 @@ export default function GameButton({
       type={type}
       form={form}
       onClick={onClick}
+      disabled={disabled}
       data-p0-click-sfx=""
-      className={outerClass}
+      className={[outerClass, disabledOuterClass].filter(Boolean).join(" ")}
       aria-current={ariaCurrent}
       aria-expanded={ariaExpanded}
     >

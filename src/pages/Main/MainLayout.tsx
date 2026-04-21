@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   mainBg,
@@ -20,6 +20,9 @@ import {
 import DashboardSidebar from "../../components/DashboardSidebar";
 import Header from "../../components/Header";
 import MentorPanel from "../../components/MentorPanel";
+import { ApiError } from "../../lib/api/errors";
+import { getMe } from "../../lib/auth/api";
+import { getAuthUser } from "../../lib/auth/storage";
 
 function normalizePath(pathname: string) {
   if (pathname.length > 1 && pathname.endsWith("/")) {
@@ -68,13 +71,36 @@ function viewportVerticalBounds() {
  */
 export default function MainLayout() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const [mentorPanelOpen, setMentorPanelOpen] = useState(false);
   const [mentorDock, setMentorDock] = useState<MentorDock | null>(null);
   const sidebarAnchorRef = useRef<HTMLDivElement>(null);
+  const [userDisplayName, setUserDisplayName] = useState(
+    () => getAuthUser()?.name ?? "PROFILE",
+  );
 
   useEffect(() => {
     setMentorPanelOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const me = await getMe();
+        if (!cancelled) setUserDisplayName(me.name);
+      } catch (err) {
+        if (err instanceof ApiError && err.kind === "unauthorized") {
+          navigate("/login", { replace: true });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   const backgroundImage = useMemo(
     () => mainDashboardBackground(pathname),
@@ -157,7 +183,7 @@ export default function MainLayout() {
     >
       <div className="min-h-screen bg-black/55 backdrop-blur-[1px]">
         <div className="pt-6 md:pt-8">
-          <Header variant="dashboard" userDisplayName="ZER BILEL" />
+          <Header variant="dashboard" userDisplayName={userDisplayName} />
         </div>
 
         <div className="mx-4 flex flex-col gap-4 px-4 pb-8 pt-5 lg:flex-row lg:items-stretch lg:gap-5 lg:px-8 lg:pt-6">
