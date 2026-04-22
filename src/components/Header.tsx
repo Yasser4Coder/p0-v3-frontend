@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { headerBg, logoCS, manCS } from "../assets/assets";
 import GameButton from "./GameButton";
+import NotificationBell from "./NotificationBell";
 import {
   HEADER_LOGO_ID,
   useHeaderLogoSuppressed,
@@ -110,15 +111,18 @@ const Header = ({
             </GameButton>
           </div>
 
-          <img
-            id={HEADER_LOGO_ID}
-            src={"/Logo.svg"}
-            alt="P0"
-            width={45}
-            height={45}
-            className={`transition-opacity duration-200 ${logoSuppressed ? "opacity-0" : "opacity-100"}`}
-            aria-hidden={logoSuppressed}
-          />
+          <div className="flex shrink-0 items-center gap-3">
+            <NotificationBell />
+            <img
+              id={HEADER_LOGO_ID}
+              src={"/Logo.svg"}
+              alt="P0"
+              width={45}
+              height={45}
+              className={`transition-opacity duration-200 ${logoSuppressed ? "opacity-0" : "opacity-100"}`}
+              aria-hidden={logoSuppressed}
+            />
+          </div>
         </div>
       </header>
     );

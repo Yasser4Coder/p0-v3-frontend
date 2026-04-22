@@ -6,6 +6,7 @@ import { splashPriorityAssets } from "./assets/splashCritical";
 import { WelcomeLoginTransitionProvider } from "./contexts/WelcomeLoginTransitionContext";
 import { warmSplashPriorityAssets } from "./utils/preloadAssets";
 import App from "./App";
+import { NotificationsProvider } from "./hooks/useNotifications";
 import "./index.css";
 
 registerSW({ immediate: true });
@@ -15,7 +16,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
       <WelcomeLoginTransitionProvider>
-        <App />
+        <NotificationsProvider>
+          <App />
+        </NotificationsProvider>
       </WelcomeLoginTransitionProvider>
     </BrowserRouter>
   </React.StrictMode>
