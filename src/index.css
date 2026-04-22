@@ -16,6 +16,7 @@ html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  overflow-x: clip;
 }
 
 @media (max-width: 1024px) {
@@ -38,6 +39,7 @@ html {
 
 body {
   background-color: #000;
+  overflow-x: clip;
 }
 
 /* Hide scrollbar but keep touch / wheel scroll (e.g. cards phone strip). */

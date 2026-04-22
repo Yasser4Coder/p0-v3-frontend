@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Navigate,
   useLocation,
@@ -8,13 +8,23 @@ import {
 } from "react-router-dom";
 import BrandedShell from "../../components/BrandedShell";
 import GameButton from "../../components/GameButton";
+import SubmissionFeedbackToast from "../../components/SubmissionFeedbackToast";
 import {
   clearChallengeContext,
   persistChallengeContext,
   readChallengeContext,
 } from "../../lib/challengeNavigation";
+import { ApiError } from "../../lib/api/errors";
 import { getChallengeById } from "../../lib/challenges/api";
 import { resolveApiFileUrl } from "../../lib/resolveFileUrl";
+import {
+  createSubmissionJson,
+  createSubmissionMultipart,
+} from "../../lib/submissions/api";
+import {
+  playCorrectAnswerVoice,
+  playWrongAnswerVoice,
+} from "../../audio/playSubmissionResultSound";
 import type { ChallengeDetailFromApi } from "../../types/challenge";
 import {
   CHALLENGE_BY_NODE,
@@ -60,6 +70,25 @@ export default function MainChallengePage() {
   const locationState = location.state as ChallengeLocationState | null;
 
   const [submission, setSubmission] = useState("");
+  const submissionFileRef = useRef<HTMLInputElement>(null);
+  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitFeedback, setSubmitFeedback] = useState<{
+    kind: "success" | "error";
+    message: string;
+  } | null>(null);
+  const dismissSubmitFeedback = useCallback(() => {
+    setSubmitFeedback(null);
+  }, []);
+
+  useEffect(() => {
+    if (!submitFeedback) return;
+    const isWrong =
+      submitFeedback.kind === "error" ||
+      submitFeedback.message.trim() === "Incorrect flag submitted. Try again.";
+    if (isWrong) playWrongAnswerVoice();
+    else playCorrectAnswerVoice();
+  }, [submitFeedback]);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [apiChallenge, setApiChallenge] = useState<ChallengeDetailFromApi | null>(
@@ -121,6 +150,13 @@ export default function MainChallengePage() {
         : undefined;
     if (id != null) persistChallengeContext({ challengeId: id, node });
   }, [locationState]);
+
+  useEffect(() => {
+    setSubmission("");
+    setSubmissionFile(null);
+    setSubmitFeedback(null);
+    if (submissionFileRef.current) submissionFileRef.current.value = "";
+  }, [challengeId]);
 
   useEffect(() => {
     if (challengeId == null) {
@@ -251,7 +287,53 @@ export default function MainChallengePage() {
 
   const fileHref = resolveApiFileUrl(apiChallenge?.file_url);
 
+  const canSubmit = challengeId != null && apiChallenge != null;
+
+  async function handleSendSubmission() {
+    if (!canSubmit || !apiChallenge) return;
+    const content = submission.trim();
+    if (!content) {
+      setSubmitFeedback({
+        kind: "error",
+        message: "Enter your answer or flag (required).",
+      });
+      return;
+    }
+    setSubmitLoading(true);
+    setSubmitFeedback(null);
+    try {
+      if (submissionFile) {
+        await createSubmissionMultipart({
+          challenge_id: apiChallenge.id,
+          content,
+          file: submissionFile,
+        });
+      } else {
+        await createSubmissionJson({
+          challenge_id: apiChallenge.id,
+          content,
+        });
+      }
+      setSubmitFeedback({
+        kind: "success",
+        message: "Submission sent successfully.",
+      });
+      setSubmission("");
+      setSubmissionFile(null);
+      if (submissionFileRef.current) submissionFileRef.current.value = "";
+    } catch (e) {
+      const message =
+        e instanceof ApiError
+          ? e.message
+          : "Could not send submission. Please try again.";
+      setSubmitFeedback({ kind: "error", message });
+    } finally {
+      setSubmitLoading(false);
+    }
+  }
+
   return (
+    <>
     <motion.div
       className="flex w-full min-w-0 flex-1 flex-col"
       initial={{ opacity: 0, y: 14 }}
@@ -338,18 +420,6 @@ export default function MainChallengePage() {
 
             <div className="mt-8 flex flex-col gap-4 border-t border-white/10 pt-6">
               <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex cursor-pointer">
-                  <input type="file" className="sr-only" accept=".pdf,application/pdf" />
-                  <span
-                    className={[
-                      "inline-flex min-h-10 items-center justify-center rounded-sm border px-6 py-2",
-                      "font-Shuriken text-xs font-black tracking-[0.35em] text-white transition-colors",
-                      theme.fileBtnClass,
-                    ].join(" ")}
-                  >
-                    FILE
-                  </span>
-                </label>
                 {fileHref ? (
                   <a
                     href={fileHref}
@@ -366,31 +436,77 @@ export default function MainChallengePage() {
                 ) : null}
               </div>
 
-              <label className="block">
-                <span className="sr-only">Submission</span>
-                <input
-                  type="text"
-                  value={submission}
-                  onChange={(e) => setSubmission(e.target.value)}
-                  placeholder="SUBMIT HERE"
-                  className={[
-                    "w-full rounded-sm border border-white/15 bg-black/55 px-4 py-3",
-                    "font-Shuriken text-xs font-bold tracking-[0.12em] text-white placeholder:text-white/35",
-                    "outline-none focus:ring-2",
-                    theme.inputFocusClass,
-                    "md:text-sm",
-                  ].join(" ")}
-                />
-              </label>
-              <p
-                className="font-Shuriken text-[0.55rem] tracking-[0.2em] text-white/65 md:text-xs"
-                style={{ textShadow: glow }}
-              >
-                SUBMIT FORM: PDF
-              </p>
+              {canSubmit ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="inline-flex cursor-pointer">
+                      <input
+                        ref={submissionFileRef}
+                        type="file"
+                        name="file"
+                        className="sr-only"
+                        accept=".pdf,application/pdf,application/zip,image/*"
+                        disabled={submitLoading}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          setSubmissionFile(f);
+                        }}
+                      />
+                      <span
+                        className={[
+                          "inline-flex min-h-10 items-center justify-center rounded-sm border px-6 py-2",
+                          "font-Shuriken text-xs font-black tracking-[0.35em] text-white transition-colors",
+                          theme.fileBtnClass,
+                          submitLoading ? "pointer-events-none opacity-60" : "",
+                        ].join(" ")}
+                      >
+                        ATTACH FILE
+                      </span>
+                    </label>
+                    {submissionFile ? (
+                      <span className="font-Shuriken text-[0.65rem] tracking-[0.12em] text-white/80">
+                        {submissionFile.name}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <label className="block">
+                    <span className="sr-only">Submission</span>
+                    <input
+                      type="text"
+                      value={submission}
+                      onChange={(e) => setSubmission(e.target.value)}
+                      placeholder="YOUR ANSWER OR FLAG (REQUIRED)"
+                      disabled={submitLoading}
+                      autoComplete="off"
+                      className={[
+                        "w-full rounded-sm border border-white/15 bg-black/55 px-4 py-3",
+                        "font-Shuriken text-xs font-bold tracking-[0.12em] text-white placeholder:text-white/35",
+                        "outline-none focus:ring-2 disabled:opacity-60",
+                        theme.inputFocusClass,
+                        "md:text-sm",
+                      ].join(" ")}
+                    />
+                  </label>
+                </>
+              ) : null}
             </div>
 
-            <div className="mt-8 flex justify-end">
+            <div className="mt-8 flex flex-wrap items-center justify-end gap-3">
+              {canSubmit ? (
+                <GameButton
+                  type="button"
+                  onClick={() => void handleSendSubmission()}
+                  disabled={submitLoading}
+                  fullWidth={false}
+                  className="shrink-0"
+                  outerBgClass="bg-[#76AF72]"
+                  bgClass="!rounded-md border !border-[#333B36] bg-[#76AF72] !px-10 !py-2.5 hover:bg-[#5f8f5b]"
+                  fontClass="font-Shuriken text-xs font-black tracking-[0.35em] text-black md:text-sm"
+                >
+                  {submitLoading ? "SENDING…" : "SEND"}
+                </GameButton>
+              ) : null}
               <GameButton
                 to="/main"
                 onClick={() => clearChallengeContext()}
@@ -407,5 +523,10 @@ export default function MainChallengePage() {
         </div>
       </BrandedShell>
     </motion.div>
+    <SubmissionFeedbackToast
+      feedback={submitFeedback}
+      onDismiss={dismissSubmitFeedback}
+    />
+    </>
   );
 }
