@@ -28,6 +28,19 @@ export function domainKeyFromTrackName(
   return null;
 }
 
+/**
+ * Map track id → domain when detail payload has no `track_name`
+ * (aligned with `/api/tracks`: AI=2, PS=4, CS=3, UX=6, GD=7).
+ */
+export function domainKeyFromTrackId(trackId: number): DomainKey | null {
+  if (trackId === 2) return "ai";
+  if (trackId === 3) return "cs";
+  if (trackId === 4) return "ps";
+  if (trackId === 6) return "ux";
+  if (trackId === 7) return "gd";
+  return null;
+}
+
 export type ChallengeCopy = {
   zoneLabel: string;
   domainTitle: string;

@@ -1,12 +1,25 @@
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 import BrandedShell from "../../components/BrandedShell";
 import GameButton from "../../components/GameButton";
+import {
+  clearChallengeContext,
+  persistChallengeContext,
+  readChallengeContext,
+} from "../../lib/challengeNavigation";
 import { getChallengeById } from "../../lib/challenges/api";
+import { resolveApiFileUrl } from "../../lib/resolveFileUrl";
+import type { ChallengeDetailFromApi } from "../../types/challenge";
 import {
   CHALLENGE_BY_NODE,
   DOMAIN_THEME,
+  domainKeyFromTrackId,
   domainKeyFromTrackName,
   isDomainKey,
   type DomainKey,
@@ -15,30 +28,99 @@ import {
 const glow =
   "0 0 10px rgba(255,255,255,0.35), 0 0 24px rgba(255,255,255,0.12)";
 
-/** `/challenge?node=cs|ps|ai|ux|gd` — domain challenge from map markers (standalone layout, no sidebar). */
+const TRACK_LABEL: Record<number, string> = {
+  2: "AI",
+  3: "CS",
+  4: "PS",
+  6: "UX",
+  7: "GD",
+};
+
+type ChallengeLocationState = {
+  challengeId?: unknown;
+  node?: unknown;
+};
+
+function parseChallengeId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value.trim());
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+/** `/challenge` — challenge id lives in router state (+ session refresh), not the URL. */
 export default function MainChallengePage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const nodeRaw = searchParams.get("node")?.toLowerCase() ?? "";
-  const idRaw = searchParams.get("id");
+  const locationState = location.state as ChallengeLocationState | null;
+
   const [submission, setSubmission] = useState("");
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [apiChallenge, setApiChallenge] = useState<{
-    title: string;
-    description: string;
-    stage_title: string;
-    mentor_name: string;
-    points: number | null;
-    track_name: string;
-    file_url: string | null;
-    type: string;
-  } | null>(null);
+  const [apiChallenge, setApiChallenge] = useState<ChallengeDetailFromApi | null>(
+    null,
+  );
 
   const challengeId = useMemo(() => {
-    if (!idRaw?.trim()) return null;
-    const n = Number(idRaw);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  }, [idRaw]);
+    const fromState = parseChallengeId(locationState?.challengeId);
+    if (fromState != null) return fromState;
+    const q = searchParams.get("id");
+    if (q?.trim()) {
+      const n = Number(q);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    const onlyNodeInUrl =
+      searchParams.has("node") && !searchParams.has("id");
+    if (!onlyNodeInUrl) {
+      const fromStorage = readChallengeContext()?.challengeId;
+      if (fromStorage != null && fromStorage > 0) return fromStorage;
+    }
+    return null;
+  }, [locationState, location.key, searchParams]);
+
+  /** Legacy `?id=&node=` links: replace with clean `/challenge` + state. */
+  useEffect(() => {
+    if (!searchParams.has("id") && !searchParams.has("node")) return;
+
+    const idRaw = searchParams.get("id");
+    const parsedId =
+      idRaw?.trim() !== "" && idRaw != null ? Number(idRaw) : NaN;
+    const id =
+      Number.isFinite(parsedId) && parsedId > 0 ? parsedId : undefined;
+
+    const nodeQ = searchParams.get("node")?.toLowerCase();
+    const node = nodeQ && isDomainKey(nodeQ) ? nodeQ : undefined;
+
+    if (id != null) {
+      persistChallengeContext({ challengeId: id, node });
+    }
+
+    navigate("/challenge", {
+      replace: true,
+      state:
+        id != null
+          ? { challengeId: id, ...(node ? { node } : {}) }
+          : node
+            ? { node }
+            : {},
+    });
+  }, [searchParams, navigate]);
+
+  /** Keep session in sync when opening from in-app navigation (state on the location). */
+  useEffect(() => {
+    const id = parseChallengeId(locationState?.challengeId);
+    const rawNode = locationState?.node;
+    const node =
+      typeof rawNode === "string" && isDomainKey(rawNode.toLowerCase())
+        ? rawNode.toLowerCase()
+        : undefined;
+    if (id != null) persistChallengeContext({ challengeId: id, node });
+  }, [locationState]);
 
   useEffect(() => {
     if (challengeId == null) {
@@ -48,22 +130,14 @@ export default function MainChallengePage() {
       return;
     }
     let cancelled = false;
+    setApiChallenge(null);
+    setApiError(null);
+    setApiLoading(true);
     (async () => {
-      setApiLoading(true);
-      setApiError(null);
       try {
         const ch = await getChallengeById(challengeId);
         if (cancelled) return;
-        setApiChallenge({
-          title: ch.title,
-          description: ch.description,
-          stage_title: ch.stage_title,
-          mentor_name: ch.mentor_name,
-          points: ch.points,
-          track_name: ch.track_name,
-          file_url: ch.file_url,
-          type: ch.type,
-        });
+        setApiChallenge(ch);
       } catch {
         if (!cancelled) {
           setApiChallenge(null);
@@ -78,20 +152,60 @@ export default function MainChallengePage() {
     };
   }, [challengeId]);
 
+  /** True on first paint and until fetch settles — avoids redirecting before `useEffect` runs. */
+  const awaitingChallengeDetail =
+    challengeId != null &&
+    !apiError &&
+    (apiLoading || apiChallenge == null);
+
+  const nodeHintRaw = useMemo(() => {
+    const raw = locationState?.node;
+    const fromState =
+      typeof raw === "string" ? raw.toLowerCase() : "";
+    if (fromState && isDomainKey(fromState)) return fromState;
+    const stored = readChallengeContext()?.node?.toLowerCase();
+    if (stored && isDomainKey(stored)) return stored;
+    const q = searchParams.get("node")?.toLowerCase() ?? "";
+    return q && isDomainKey(q) ? q : "";
+  }, [locationState, location.key, searchParams]);
+
   const domainFromNode = useMemo((): DomainKey | null => {
-    return isDomainKey(nodeRaw) ? nodeRaw : null;
-  }, [nodeRaw]);
+    return isDomainKey(nodeHintRaw) ? nodeHintRaw : null;
+  }, [nodeHintRaw]);
 
-  const domainFromApi = useMemo((): DomainKey | null => {
-    return domainKeyFromTrackName(apiChallenge?.track_name);
-  }, [apiChallenge?.track_name]);
+  /** Map / URL hint — matches logo or fixes bad `track_id`. */
+  const domainHint = useMemo((): DomainKey | null => {
+    return isDomainKey(nodeHintRaw) ? nodeHintRaw : null;
+  }, [nodeHintRaw]);
 
-  const domain = challengeId != null ? domainFromApi : domainFromNode;
+  /** Theme: API track name → map hint (logo) → numeric track id. */
+  const domain = useMemo((): DomainKey | null => {
+    if (challengeId != null) {
+      if (!apiChallenge) return null;
+      return (
+        domainKeyFromTrackName(apiChallenge.track_name) ??
+        domainHint ??
+        domainKeyFromTrackId(apiChallenge.track_id)
+      );
+    }
+    return domainFromNode;
+  }, [challengeId, apiChallenge, domainHint, domainFromNode]);
 
-  if (challengeId != null && apiLoading) {
+  if (awaitingChallengeDetail) {
     return (
       <div className="flex min-h-[40vh] w-full items-center justify-center font-Shuriken text-sm tracking-[0.2em] text-white/80">
         Loading challenge…
+      </div>
+    );
+  }
+
+  if (challengeId != null && apiError) {
+    return (
+      <div className="flex min-h-[40vh] w-full flex-col items-center justify-center gap-4 px-4 text-center font-Shuriken text-sm tracking-[0.2em] text-white/80">
+        <p>{apiError}</p>
+        <GameButton type="button" onClick={() => window.history.back()}>
+          Back
+        </GameButton>
       </div>
     );
   }
@@ -105,7 +219,9 @@ export default function MainChallengePage() {
 
   const zoneLabel =
     apiChallenge != null
-      ? `${apiChallenge.stage_title.toUpperCase()} · ${apiChallenge.track_name}`
+      ? `STAGE ${apiChallenge.stage_id} · ${
+          TRACK_LABEL[apiChallenge.track_id] ?? `TRACK ${apiChallenge.track_id}`
+        }`
       : c.zoneLabel;
   const domainTitle =
     apiChallenge != null ? apiChallenge.title.toUpperCase() : c.domainTitle;
@@ -113,12 +229,27 @@ export default function MainChallengePage() {
     apiChallenge != null ? apiChallenge.description : c.narrative;
   const taskBody =
     apiChallenge != null
-      ? `Mentor: ${apiChallenge.mentor_name}${
-          apiChallenge.points != null
-            ? ` · Points: ${apiChallenge.points}`
-            : ""
-        } · Type: ${apiChallenge.type}`
+      ? (() => {
+          const parts: string[] = [`Type: ${apiChallenge.type}`];
+          if (apiChallenge.points != null) {
+            parts.push(`Points: ${apiChallenge.points}`);
+          }
+          if (apiChallenge.type === "auto") {
+            if (apiChallenge.max_points != null) {
+              parts.push(`Max: ${apiChallenge.max_points}`);
+            }
+            if (apiChallenge.min_points != null) {
+              parts.push(`Min: ${apiChallenge.min_points}`);
+            }
+            if (apiChallenge.decay != null) {
+              parts.push(`Decay: ${apiChallenge.decay}`);
+            }
+          }
+          return parts.join(" · ");
+        })()
       : c.taskBody;
+
+  const fileHref = resolveApiFileUrl(apiChallenge?.file_url);
 
   return (
     <motion.div
@@ -219,9 +350,9 @@ export default function MainChallengePage() {
                     FILE
                   </span>
                 </label>
-                {apiChallenge?.file_url ? (
+                {fileHref ? (
                   <a
-                    href={apiChallenge.file_url}
+                    href={fileHref}
                     target="_blank"
                     rel="noreferrer"
                     className={[
@@ -262,6 +393,7 @@ export default function MainChallengePage() {
             <div className="mt-8 flex justify-end">
               <GameButton
                 to="/main"
+                onClick={() => clearChallengeContext()}
                 fullWidth={false}
                 className="shrink-0"
                 outerBgClass="bg-[#C5A059]"

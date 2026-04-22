@@ -1,6 +1,6 @@
 import { apiClient } from "../api/client";
 import { ApiError, toApiError } from "../api/errors";
-import type { ChallengeFromApi } from "../../types/challenge";
+import type { ChallengeDetailFromApi, ChallengeFromApi } from "../../types/challenge";
 
 type ChallengesListResponse =
   | {
@@ -44,10 +44,10 @@ export async function getChallenges() {
 }
 
 type ChallengeOneResponse =
-  | { success: true; message: string; data: ChallengeFromApi }
+  | { success: true; message: string; data: ChallengeDetailFromApi }
   | { success: false; message: string; data: null };
 
-export async function getChallengeById(id: number) {
+export async function getChallengeById(id: number): Promise<ChallengeDetailFromApi> {
   try {
     const res = await apiClient.get<ChallengeOneResponse>(
       `/api/challenges/${id}`,

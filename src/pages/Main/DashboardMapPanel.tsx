@@ -18,15 +18,30 @@ import {
 import BrandedShell from "../../components/BrandedShell";
 import { getChallenges } from "../../lib/challenges/api";
 import type { ChallengeFromApi } from "../../types/challenge";
+import { persistChallengeContext } from "../../lib/challengeNavigation";
+import {
+  domainKeyFromTrackId,
+  domainKeyFromTrackName,
+} from "./challenge/challengeData";
 
 const MAP_VIEW_W = 800;
 const MAP_VIEW_H = 520;
+
+/** Island art is centered in the viewBox — keep pins inside this disk, not the full rectangle. */
+const MAP_CENTER_X = MAP_VIEW_W / 2;
+const MAP_CENTER_Y = MAP_VIEW_H / 2;
 
 /** Smaller markers — many challenges can appear on the map */
 const MAP_NODE_IMG_R = 11;
 const MAP_NODE_HIT_R = MAP_NODE_IMG_R + 5;
 
 const PADDING = MAP_NODE_IMG_R + MAP_NODE_HIT_R + 4;
+
+/** Max distance from center for marker *center* so the hit circle stays on the island. */
+const MAP_PLACEMENT_MAX_R = Math.max(
+  48,
+  Math.min(MAP_VIEW_W, MAP_VIEW_H) * 0.31 - MAP_NODE_HIT_R - 6,
+);
 
 function logoForTrackName(trackName: string) {
   const key = trackName.trim().toUpperCase();
@@ -52,6 +67,23 @@ function hash01(id: number, salt: number) {
   return x - Math.floor(x);
 }
 
+/** Uniform random point in a disk (stable per id + attempt). */
+function hashPointInPlacementDisk(
+  id: number,
+  saltR: number,
+  saltTheta: number,
+  attempt: number,
+) {
+  const u = hash01(id + attempt * 997, saltR);
+  const v = hash01(id + attempt * 691, saltTheta);
+  const r = MAP_PLACEMENT_MAX_R * Math.sqrt(u);
+  const theta = 2 * Math.PI * v;
+  return {
+    x: MAP_CENTER_X + r * Math.cos(theta),
+    y: MAP_CENTER_Y + r * Math.sin(theta),
+  };
+}
+
 type PlacedChallenge = ChallengeFromApi & {
   x: number;
   y: number;
@@ -63,14 +95,15 @@ function placeChallenges(challenges: ChallengeFromApi[]): PlacedChallenge[] {
   if (!n) return [];
 
   const maxR = MAP_NODE_HIT_R;
-  const minX = PADDING;
-  const maxX = MAP_VIEW_W - PADDING;
-  const minY = PADDING;
-  const maxY = MAP_VIEW_H - PADDING;
 
   const placed: { x: number; y: number }[] = [];
 
   const fits = (x: number, y: number) => {
+    const ox = x - MAP_CENTER_X;
+    const oy = y - MAP_CENTER_Y;
+    if (ox * ox + oy * oy > MAP_PLACEMENT_MAX_R * MAP_PLACEMENT_MAX_R) {
+      return false;
+    }
     for (const p of placed) {
       const dx = x - p.x;
       const dy = y - p.y;
@@ -80,14 +113,17 @@ function placeChallenges(challenges: ChallengeFromApi[]): PlacedChallenge[] {
   };
 
   return challenges.map((ch, index) => {
-    let x = minX + hash01(ch.id, 1) * (maxX - minX);
-    let y = minY + hash01(ch.id, 2) * (maxY - minY);
+    let { x, y } = hashPointInPlacementDisk(ch.id, 1, 2, 0);
 
     let ok = fits(x, y);
     if (!ok) {
       for (let attempt = 0; attempt < 420; attempt++) {
-        x = minX + hash01(ch.id + attempt * 997, 3 + attempt) * (maxX - minX);
-        y = minY + hash01(ch.id + attempt * 691, 5 + attempt) * (maxY - minY);
+        ({ x, y } = hashPointInPlacementDisk(
+          ch.id + attempt * 131,
+          3 + attempt,
+          5 + attempt,
+          attempt + 1,
+        ));
         if (fits(x, y)) {
           ok = true;
           break;
@@ -96,14 +132,12 @@ function placeChallenges(challenges: ChallengeFromApi[]): PlacedChallenge[] {
     }
 
     if (!ok) {
-      const cols = Math.ceil(Math.sqrt(n));
-      const rows = Math.ceil(n / cols);
-      const cw = (maxX - minX) / cols;
-      const rh = (maxY - minY) / rows;
-      const col = index % cols;
-      const row = Math.floor(index / cols);
-      x = minX + cw * (col + 0.5);
-      y = minY + rh * (row + 0.5);
+      const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+      const t = (index + 1) / (n + 1);
+      const rr = MAP_PLACEMENT_MAX_R * 0.92 * Math.sqrt(t);
+      const angle = index * goldenAngle + hash01(ch.id, 88) * 2 * Math.PI;
+      x = MAP_CENTER_X + rr * Math.cos(angle);
+      y = MAP_CENTER_Y + rr * Math.sin(angle);
     }
 
     placed.push({ x, y });
@@ -150,19 +184,27 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
     [challenges],
   );
 
-  const openChallenge = (challengeId: number) => {
-    navigate(`/challenge?id=${encodeURIComponent(String(challengeId))}`);
+  const openChallenge = (ch: ChallengeFromApi) => {
+    const domain =
+      domainKeyFromTrackName(ch.track_name) ??
+      domainKeyFromTrackId(ch.track_id);
+    const ctx = {
+      challengeId: ch.id,
+      ...(domain ? { node: domain } : {}),
+    };
+    persistChallengeContext(ctx);
+    navigate("/challenge", { state: ctx });
   };
 
   const onChallengeActivate = (
-    challengeId: number,
+    ch: ChallengeFromApi,
     e: MouseEvent<SVGGElement> | KeyboardEvent<SVGGElement>,
   ) => {
     if ("key" in e) {
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
     }
-    openChallenge(challengeId);
+    openChallenge(ch);
   };
 
   /** Rough tooltip width for clamping inside the map viewBox */
@@ -244,8 +286,8 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
                     current === node.id ? null : current,
                   )
                 }
-                onClick={(e) => onChallengeActivate(node.id, e)}
-                onKeyDown={(e) => onChallengeActivate(node.id, e)}
+                onClick={(e) => onChallengeActivate(node, e)}
+                onKeyDown={(e) => onChallengeActivate(node, e)}
               >
                 <g filter={`url(#${filterId})`}>
                   <image
