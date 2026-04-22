@@ -1,4 +1,11 @@
-import { useId, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Map as mapImage,
@@ -9,56 +16,106 @@ import {
   logoUX,
 } from "../../assets/assets";
 import BrandedShell from "../../components/BrandedShell";
+import { getChallenges } from "../../lib/challenges/api";
+import type { ChallengeFromApi } from "../../types/challenge";
 
 const MAP_VIEW_W = 800;
 const MAP_VIEW_H = 520;
 
-const MAP_NODES: {
+/** Smaller markers — many challenges can appear on the map */
+const MAP_NODE_IMG_R = 11;
+const MAP_NODE_HIT_R = MAP_NODE_IMG_R + 5;
+
+const PADDING = MAP_NODE_IMG_R + MAP_NODE_HIT_R + 4;
+
+function logoForTrackName(trackName: string) {
+  const key = trackName.trim().toUpperCase();
+  switch (key) {
+    case "PS":
+      return logoPS;
+    case "AI":
+      return logoAI;
+    case "CS":
+      return logoCS;
+    case "UX":
+      return logoUX;
+    case "GD":
+      return logoGD;
+    default:
+      return logoCS;
+  }
+}
+
+/** Deterministic “random” in [0, 1) from id + salt */
+function hash01(id: number, salt: number) {
+  const x = Math.sin(id * 12.9898 + salt * 78.233 + 54.321) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+type PlacedChallenge = ChallengeFromApi & {
   x: number;
   y: number;
   logo: string;
-  nodeId: string;
-  label: string;
-}[] = [
-  {
-    x: 0.32 * MAP_VIEW_W,
-    y: 0.18 * MAP_VIEW_H,
-    logo: logoCS,
-    nodeId: "cs",
-    label: "Cyber security",
-  },
-  {
-    x: 0.55 * MAP_VIEW_W,
-    y: 0.28 * MAP_VIEW_H,
-    logo: logoPS,
-    nodeId: "ps",
-    label: "Problem solving",
-  },
-  {
-    x: 0.4 * MAP_VIEW_W,
-    y: 0.42 * MAP_VIEW_H,
-    logo: logoAI,
-    nodeId: "ai",
-    label: "AI",
-  },
-  {
-    x: 0.62 * MAP_VIEW_W,
-    y: 0.55 * MAP_VIEW_H,
-    logo: logoGD,
-    nodeId: "gd",
-    label: "Graphic design",
-  },
-  {
-    x: 0.72 * MAP_VIEW_W,
-    y: 0.38 * MAP_VIEW_H,
-    logo: logoUX,
-    nodeId: "ux",
-    label: "UI / UX",
-  },
-];
+};
 
-const MAP_NODE_IMG_R = 16;
-const MAP_NODE_HIT_R = MAP_NODE_IMG_R + 6;
+function placeChallenges(challenges: ChallengeFromApi[]): PlacedChallenge[] {
+  const n = challenges.length;
+  if (!n) return [];
+
+  const maxR = MAP_NODE_HIT_R;
+  const minX = PADDING;
+  const maxX = MAP_VIEW_W - PADDING;
+  const minY = PADDING;
+  const maxY = MAP_VIEW_H - PADDING;
+
+  const placed: { x: number; y: number }[] = [];
+
+  const fits = (x: number, y: number) => {
+    for (const p of placed) {
+      const dx = x - p.x;
+      const dy = y - p.y;
+      if (dx * dx + dy * dy < (2 * maxR) * (2 * maxR)) return false;
+    }
+    return true;
+  };
+
+  return challenges.map((ch, index) => {
+    let x = minX + hash01(ch.id, 1) * (maxX - minX);
+    let y = minY + hash01(ch.id, 2) * (maxY - minY);
+
+    let ok = fits(x, y);
+    if (!ok) {
+      for (let attempt = 0; attempt < 420; attempt++) {
+        x = minX + hash01(ch.id + attempt * 997, 3 + attempt) * (maxX - minX);
+        y = minY + hash01(ch.id + attempt * 691, 5 + attempt) * (maxY - minY);
+        if (fits(x, y)) {
+          ok = true;
+          break;
+        }
+      }
+    }
+
+    if (!ok) {
+      const cols = Math.ceil(Math.sqrt(n));
+      const rows = Math.ceil(n / cols);
+      const cw = (maxX - minX) / cols;
+      const rh = (maxY - minY) / rows;
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      x = minX + cw * (col + 0.5);
+      y = minY + rh * (row + 0.5);
+    }
+
+    placed.push({ x, y });
+
+    return {
+      ...ch,
+      x,
+      y,
+      logo: logoForTrackName(ch.track_name),
+    };
+  });
+}
 
 export type DashboardMapPanelProps = {
   /** Status-style layout: wider map, `flex-1` on the column. */
@@ -70,20 +127,54 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
   const filterId = `mapNodeShadow-${uid}`;
   const navigate = useNavigate();
 
-  const openMapNode = (nodeId: string) => {
-    navigate(`/challenge?node=${encodeURIComponent(nodeId)}`);
+  const [challenges, setChallenges] = useState<ChallengeFromApi[]>([]);
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await getChallenges();
+        if (!cancelled) setChallenges(list);
+      } catch {
+        if (!cancelled) setChallenges([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const placed = useMemo(
+    () => placeChallenges(challenges),
+    [challenges],
+  );
+
+  const openChallenge = (challengeId: number) => {
+    navigate(`/challenge?id=${encodeURIComponent(String(challengeId))}`);
   };
 
-  const onMapNodeActivate = (
-    nodeId: string,
+  const onChallengeActivate = (
+    challengeId: number,
     e: MouseEvent<SVGGElement> | KeyboardEvent<SVGGElement>,
   ) => {
     if ("key" in e) {
       if (e.key !== "Enter" && e.key !== " ") return;
       e.preventDefault();
     }
-    openMapNode(nodeId);
+    openChallenge(challengeId);
   };
+
+  /** Rough tooltip width for clamping inside the map viewBox */
+  function tooltipMetrics(title: string) {
+    const padX = 12;
+    const maxChars = 36;
+    const t =
+      title.length > maxChars ? `${title.slice(0, maxChars).trim()}…` : title;
+    const estW = Math.min(280, Math.max(120, t.length * 6.2 + padX * 2));
+    const h = 26;
+    return { text: t, w: estW, h, padX };
+  }
 
   return (
     <BrandedShell
@@ -115,10 +206,10 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
                   floodOpacity="0.4"
                 />
               </filter>
-              {MAP_NODES.map((_, i) => (
+              {placed.map((ch) => (
                 <clipPath
-                  key={i}
-                  id={`map-node-clip-${uid}-${i}`}
+                  key={ch.id}
+                  id={`map-node-clip-${uid}-${ch.id}`}
                   clipPathUnits="objectBoundingBox"
                 >
                   <circle cx="0.5" cy="0.5" r="0.5" />
@@ -133,16 +224,28 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
               height="520"
               preserveAspectRatio="xMidYMid meet"
             />
-            {MAP_NODES.map((node, i) => (
+            {placed.map((node) => (
               <g
-                key={node.nodeId}
+                key={node.id}
                 transform={`translate(${node.x},${node.y})`}
                 className="cursor-pointer outline-none focus-visible:[&_.map-node-hit]:stroke-[#39FF14] focus-visible:[&_.map-node-hit]:stroke-[2.5]"
                 role="button"
                 tabIndex={0}
-                aria-label={node.label}
-                onClick={(e) => onMapNodeActivate(node.nodeId, e)}
-                onKeyDown={(e) => onMapNodeActivate(node.nodeId, e)}
+                aria-label={node.title}
+                onMouseEnter={() => setHoveredId(node.id)}
+                onMouseLeave={() =>
+                  setHoveredId((current) =>
+                    current === node.id ? null : current,
+                  )
+                }
+                onFocus={() => setHoveredId(node.id)}
+                onBlur={() =>
+                  setHoveredId((current) =>
+                    current === node.id ? null : current,
+                  )
+                }
+                onClick={(e) => onChallengeActivate(node.id, e)}
+                onKeyDown={(e) => onChallengeActivate(node.id, e)}
               >
                 <g filter={`url(#${filterId})`}>
                   <image
@@ -151,7 +254,7 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
                     y={-MAP_NODE_IMG_R}
                     width={MAP_NODE_IMG_R * 2}
                     height={MAP_NODE_IMG_R * 2}
-                    clipPath={`url(#map-node-clip-${uid}-${i})`}
+                    clipPath={`url(#map-node-clip-${uid}-${node.id})`}
                     preserveAspectRatio="xMidYMid slice"
                     className="pointer-events-none"
                   />
@@ -163,6 +266,51 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
                   stroke="transparent"
                   pointerEvents="all"
                 />
+                {hoveredId === node.id
+                  ? (() => {
+                      const m = tooltipMetrics(node.title);
+                      const tipXRaw = -m.w / 2;
+                      const maxLeft = MAP_VIEW_W - node.x - PADDING - m.w;
+                      const minLeft = PADDING - node.x;
+                      const tipX = Math.min(maxLeft, Math.max(minLeft, tipXRaw));
+                      const tipY = -MAP_NODE_HIT_R - m.h - 10;
+                      return (
+                        <g
+                          className="pointer-events-none"
+                          transform={`translate(${tipX},${tipY})`}
+                          aria-hidden
+                        >
+                          <rect
+                            x={0}
+                            y={0}
+                            width={m.w}
+                            height={m.h}
+                            rx={8}
+                            ry={8}
+                            fill="rgba(0,0,0,0.82)"
+                            stroke="rgba(255,255,255,0.42)"
+                            strokeWidth={1}
+                          />
+                          <text
+                            x={m.padX}
+                            y={17}
+                            fill="#ffffff"
+                            fontFamily="inherit"
+                            fontSize={10}
+                            fontWeight={700}
+                            letterSpacing="0.08em"
+                            style={{
+                              paintOrder: "stroke fill",
+                              stroke: "rgba(0,0,0,0.55)",
+                              strokeWidth: 3,
+                            }}
+                          >
+                            {m.text}
+                          </text>
+                        </g>
+                      );
+                    })()
+                  : null}
               </g>
             ))}
           </svg>

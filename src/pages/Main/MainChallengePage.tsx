@@ -1,11 +1,13 @@
 import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import BrandedShell from "../../components/BrandedShell";
 import GameButton from "../../components/GameButton";
+import { getChallengeById } from "../../lib/challenges/api";
 import {
   CHALLENGE_BY_NODE,
   DOMAIN_THEME,
+  domainKeyFromTrackName,
   isDomainKey,
   type DomainKey,
 } from "./challenge/challengeData";
@@ -17,11 +19,82 @@ const glow =
 export default function MainChallengePage() {
   const [searchParams] = useSearchParams();
   const nodeRaw = searchParams.get("node")?.toLowerCase() ?? "";
+  const idRaw = searchParams.get("id");
   const [submission, setSubmission] = useState("");
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [apiChallenge, setApiChallenge] = useState<{
+    title: string;
+    description: string;
+    stage_title: string;
+    mentor_name: string;
+    points: number | null;
+    track_name: string;
+    file_url: string | null;
+    type: string;
+  } | null>(null);
 
-  const domain = useMemo((): DomainKey | null => {
+  const challengeId = useMemo(() => {
+    if (!idRaw?.trim()) return null;
+    const n = Number(idRaw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }, [idRaw]);
+
+  useEffect(() => {
+    if (challengeId == null) {
+      setApiChallenge(null);
+      setApiError(null);
+      setApiLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setApiLoading(true);
+      setApiError(null);
+      try {
+        const ch = await getChallengeById(challengeId);
+        if (cancelled) return;
+        setApiChallenge({
+          title: ch.title,
+          description: ch.description,
+          stage_title: ch.stage_title,
+          mentor_name: ch.mentor_name,
+          points: ch.points,
+          track_name: ch.track_name,
+          file_url: ch.file_url,
+          type: ch.type,
+        });
+      } catch {
+        if (!cancelled) {
+          setApiChallenge(null);
+          setApiError("Could not load this challenge.");
+        }
+      } finally {
+        if (!cancelled) setApiLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [challengeId]);
+
+  const domainFromNode = useMemo((): DomainKey | null => {
     return isDomainKey(nodeRaw) ? nodeRaw : null;
   }, [nodeRaw]);
+
+  const domainFromApi = useMemo((): DomainKey | null => {
+    return domainKeyFromTrackName(apiChallenge?.track_name);
+  }, [apiChallenge?.track_name]);
+
+  const domain = challengeId != null ? domainFromApi : domainFromNode;
+
+  if (challengeId != null && apiLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center font-Shuriken text-sm tracking-[0.2em] text-white/80">
+        Loading challenge…
+      </div>
+    );
+  }
 
   if (!domain) {
     return <Navigate to="/main" replace />;
@@ -29,6 +102,23 @@ export default function MainChallengePage() {
 
   const c = CHALLENGE_BY_NODE[domain];
   const theme = DOMAIN_THEME[domain];
+
+  const zoneLabel =
+    apiChallenge != null
+      ? `${apiChallenge.stage_title.toUpperCase()} · ${apiChallenge.track_name}`
+      : c.zoneLabel;
+  const domainTitle =
+    apiChallenge != null ? apiChallenge.title.toUpperCase() : c.domainTitle;
+  const narrative =
+    apiChallenge != null ? apiChallenge.description : c.narrative;
+  const taskBody =
+    apiChallenge != null
+      ? `Mentor: ${apiChallenge.mentor_name}${
+          apiChallenge.points != null
+            ? ` · Points: ${apiChallenge.points}`
+            : ""
+        } · Type: ${apiChallenge.type}`
+      : c.taskBody;
 
   return (
     <motion.div
@@ -67,13 +157,13 @@ export default function MainChallengePage() {
                   className="font-Shuriken text-[0.65rem] font-bold tracking-[0.22em] text-white/90 sm:text-xs md:text-sm"
                   style={{ textShadow: glow }}
                 >
-                  {c.zoneLabel}
+                  {zoneLabel}
                 </p>
                 <h1
                   className="mt-1 font-Shuriken text-lg font-black tracking-[0.18em] text-white sm:text-xl md:text-2xl"
                   style={{ textShadow: glow }}
                 >
-                  {c.domainTitle}
+                  {domainTitle}
                 </h1>
               </div>
               <img
@@ -95,7 +185,11 @@ export default function MainChallengePage() {
               className="font-Shuriken text-left text-[0.65rem] font-bold leading-relaxed tracking-[0.08em] text-white/95 sm:text-xs md:text-sm md:leading-relaxed md:tracking-[0.1em]"
               style={{ textShadow: glow }}
             >
-              {c.narrative}
+              {apiError ? (
+                <span className="text-red-200/95">{apiError}</span>
+              ) : (
+                narrative
+              )}
             </p>
 
             <h2
@@ -108,7 +202,7 @@ export default function MainChallengePage() {
               className="mt-2 font-Shuriken text-left text-[0.65rem] font-bold leading-relaxed tracking-[0.08em] text-white/95 sm:text-xs md:text-sm"
               style={{ textShadow: glow }}
             >
-              {c.taskBody}
+              {taskBody}
             </p>
 
             <div className="mt-8 flex flex-col gap-4 border-t border-white/10 pt-6">
@@ -125,6 +219,20 @@ export default function MainChallengePage() {
                     FILE
                   </span>
                 </label>
+                {apiChallenge?.file_url ? (
+                  <a
+                    href={apiChallenge.file_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={[
+                      "inline-flex min-h-10 items-center justify-center rounded-sm border px-4 py-2",
+                      "font-Shuriken text-[0.65rem] font-black tracking-[0.2em] text-white underline-offset-2 hover:underline",
+                      theme.fileBtnClass,
+                    ].join(" ")}
+                  >
+                    OPEN FILE
+                  </a>
+                ) : null}
               </div>
 
               <label className="block">

@@ -14,6 +14,20 @@ export function isDomainKey(s: string | null | undefined): s is DomainKey {
   return s != null && (DOMAIN_KEYS as string[]).includes(s);
 }
 
+/** Map API `track_name` (PS, AI, …) to map/challenge domain keys. */
+export function domainKeyFromTrackName(
+  trackName: string | null | undefined,
+): DomainKey | null {
+  if (!trackName?.trim()) return null;
+  const k = trackName.trim().toUpperCase();
+  if (k === "CS") return "cs";
+  if (k === "PS") return "ps";
+  if (k === "AI") return "ai";
+  if (k === "UX") return "ux";
+  if (k === "GD") return "gd";
+  return null;
+}
+
 export type ChallengeCopy = {
   zoneLabel: string;
   domainTitle: string;
