@@ -1,7 +1,14 @@
 import BrandedShell from "../../components/BrandedShell";
 import FrostedPanel from "../../components/FrostedPanel";
 import DashboardMapPanel from "./DashboardMapPanel";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ApiError } from "../../lib/api/errors";
+import {
+  getAnnouncements,
+  type AnnouncementFromApi,
+} from "../../lib/announcements/api";
 
 const GOLD = "#C5A059";
 
@@ -14,8 +21,16 @@ const SKILLS: { label: string; value: number; tone: "green" | "gold" }[] = [
   { label: "TEAM PROGRES", value: 70, tone: "gold" },
 ];
 
-const ANNOUNCEMENT =
-  "HEY HUNTERS KHALIL WANTS TO MAKE A BIG ANNOUNCEMENT FOR YOU HE IS THE MOST HANDSOME MAN THAT THE EARTH HAS EVER SEEN AND NO ONE CAN COMPARE HIM WITH ANOTHER CUZ HE IS THE GOAT";
+function formatAnnouncementDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function SkillBar({
   label,
@@ -49,6 +64,51 @@ function SkillBar({
 
 /** `/main` — map + status + announcement. */
 export default function MainHomePage() {
+  const [announcements, setAnnouncements] = useState<AnnouncementFromApi[]>([]);
+  const [announcementsError, setAnnouncementsError] = useState<string | null>(
+    null,
+  );
+  const [index, setIndex] = useState(0);
+  const [dir, setDir] = useState<-1 | 1>(1);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await getAnnouncements();
+        if (cancelled) return;
+        setAnnouncements(list);
+        setAnnouncementsError(null);
+        setIndex(0); // newest first
+      } catch (e) {
+        if (cancelled) return;
+        const message =
+          e instanceof ApiError ? e.message : "Could not load announcements.";
+        setAnnouncements([]);
+        setAnnouncementsError(message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const current = useMemo(() => announcements[index] ?? null, [announcements, index]);
+  const canGoPrev = index < announcements.length - 1;
+  const canGoNext = index > 0;
+
+  const goPrev = () => {
+    if (!canGoPrev) return;
+    setDir(1);
+    setIndex((i) => Math.min(announcements.length - 1, i + 1));
+  };
+
+  const goNext = () => {
+    if (!canGoNext) return;
+    setDir(-1);
+    setIndex((i) => Math.max(0, i - 1));
+  };
+
   return (
     <>
       <motion.div
@@ -91,9 +151,110 @@ export default function MainHomePage() {
           >
             Announcement
           </h2>
-          <p className="text-left text-xs leading-relaxed tracking-wide text-white/95 md:text-sm">
-            {ANNOUNCEMENT}
-          </p>
+          <div className="relative">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={goPrev}
+                disabled={!canGoPrev}
+                className={[
+                  "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/80 backdrop-blur-sm transition",
+                  "hover:bg-black/55 hover:text-white disabled:opacity-40 disabled:hover:bg-black/35",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/35",
+                ].join(" ")}
+                aria-label="Previous announcement"
+              >
+                <ChevronLeft className="h-4 w-4" strokeWidth={2.6} />
+              </button>
+
+              <div className="flex items-center gap-2">
+                {announcements.length ? (
+                  <span className="font-Shuriken text-[0.55rem] font-black tracking-[0.3em] text-white/65">
+                    {index + 1}/{announcements.length}
+                  </span>
+                ) : null}
+              </div>
+
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={!canGoNext}
+                className={[
+                  "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/35 text-white/80 backdrop-blur-sm transition",
+                  "hover:bg-black/55 hover:text-white disabled:opacity-40 disabled:hover:bg-black/35",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/35",
+                ].join(" ")}
+                aria-label="Next (newer) announcement"
+              >
+                <ChevronRight className="h-4 w-4" strokeWidth={2.6} />
+              </button>
+            </div>
+
+            <div className="relative overflow-hidden">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={current ? String(current.id) : announcementsError ?? "empty"}
+                  initial={{ opacity: 0, x: dir * 26, filter: "blur(4px)" }}
+                  animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, x: dir * -26, filter: "blur(4px)" }}
+                  transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                  drag={current ? "x" : false}
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.15}
+                  onDragEnd={(_, info) => {
+                    const threshold = 60;
+                    if (info.offset.x > threshold) goPrev();
+                    else if (info.offset.x < -threshold) goNext();
+                  }}
+                  className={[
+                    "min-w-0 rounded-2xl border border-white/10 bg-black/35 px-3.5 py-3.5",
+                    "shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-md",
+                  ].join(" ")}
+                >
+                  {announcementsError ? (
+                    <p className="text-left text-xs leading-relaxed tracking-wide text-red-100/90 md:text-sm">
+                      {announcementsError}
+                    </p>
+                  ) : current ? (
+                    <>
+                      <div className="mb-2 flex min-w-0 items-start justify-between gap-3">
+                        <h3 className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] font-Shuriken text-sm font-black tracking-[0.16em] text-white/95 md:text-base">
+                          {current.title}
+                        </h3>
+                        <div className="shrink-0 text-right">
+                          <p className="font-Shuriken text-[0.55rem] font-black tracking-[0.22em] text-white/60">
+                            {formatAnnouncementDate(current.created_at)}
+                          </p>
+                          <p className="font-Shuriken text-[0.55rem] font-black tracking-[0.22em] text-white/50">
+                            {current.author_name ? `BY ${current.author_name}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="whitespace-pre-line break-words [overflow-wrap:anywhere] text-left text-xs leading-relaxed tracking-wide text-white/95 md:text-sm">
+                        {current.content}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="mb-2 flex min-w-0 items-start justify-between gap-3">
+                        <h3 className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] font-Shuriken text-sm font-black tracking-[0.16em] text-white/90 md:text-base">
+                          Announcements will appear here
+                        </h3>
+                        <div className="shrink-0 text-right">
+                          <p className="font-Shuriken text-[0.55rem] font-black tracking-[0.22em] text-white/50">
+                            STAY TUNED
+                          </p>
+                        </div>
+                      </div>
+                      <p className="whitespace-pre-line break-words [overflow-wrap:anywhere] text-left text-xs leading-relaxed tracking-wide text-white/75 md:text-sm">
+                        No announcements yet. When admins or mentors post updates, you’ll be able to swipe through them here.
+                      </p>
+                    </>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
         </FrostedPanel>
       </motion.div>
     </>
