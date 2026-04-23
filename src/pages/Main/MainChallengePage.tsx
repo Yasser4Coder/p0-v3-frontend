@@ -735,7 +735,7 @@ export default function MainChallengePage() {
                         type="file"
                         name="file"
                         className="sr-only"
-                        accept=".pdf,application/pdf,application/zip,image/*"
+                        accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
                         disabled={submitLoading}
                         onChange={(e) => {
                           const f = e.target.files?.[0] ?? null;
@@ -753,6 +753,9 @@ export default function MainChallengePage() {
                         ATTACH FILE
                       </span>
                     </label>
+                    <span className="font-Shuriken text-[0.6rem] font-bold tracking-[0.14em] text-white/55">
+                      Allowed: PNG, JPG, JPEG, PDF
+                    </span>
                     {submissionFile ? (
                       <span className="font-Shuriken text-[0.65rem] tracking-[0.12em] text-white/80">
                         {submissionFile.name}
