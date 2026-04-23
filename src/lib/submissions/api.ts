@@ -134,3 +134,70 @@ export async function getMySubmissions(): Promise<MySubmission[]> {
     throw toApiError(err);
   }
 }
+
+export async function updateSubmissionMultipart(params: {
+  submission_id: number;
+  challenge_id: number;
+  sub_challenge_id: number;
+  content: string;
+  file?: File | null;
+}): Promise<{ success?: boolean; message?: string; data?: unknown }> {
+  const submissionId = Number(params.submission_id);
+  const challengeId = Number(params.challenge_id);
+  const subId = Number(params.sub_challenge_id);
+
+  if (!Number.isFinite(submissionId) || submissionId < 1) {
+    throw new ApiError({ kind: "bad_request", message: "Invalid submission id." });
+  }
+  if (!Number.isFinite(challengeId) || challengeId < 1) {
+    throw new ApiError({ kind: "bad_request", message: "Invalid challenge id." });
+  }
+  if (!Number.isFinite(subId) || subId < 1) {
+    throw new ApiError({
+      kind: "bad_request",
+      message: "Invalid sub-challenge id for submission.",
+    });
+  }
+
+  const form = new FormData();
+  form.append("challenge_id", String(challengeId));
+  form.append("sub_challenge_id", String(subId));
+  form.append("content", params.content);
+  if (params.file) form.append("file", params.file);
+
+  try {
+    const res = await apiClient.put(`/api/submissions/${submissionId}`, form, {
+      maxContentLength: 25_000_000,
+      maxBodyLength: 25_000_000,
+      transformRequest: [
+        (data, headers) => {
+          if (data instanceof FormData && headers != null) {
+            delete (headers as Record<string, unknown>)["Content-Type"];
+          }
+          return data;
+        },
+      ],
+    });
+
+    const payloadData = res.data as {
+      success?: boolean;
+      message?: string;
+      data?: unknown;
+    };
+    if (
+      payloadData &&
+      typeof payloadData === "object" &&
+      payloadData.success === false
+    ) {
+      throw new ApiError({
+        kind: "bad_request",
+        status: res.status,
+        message: payloadData.message ?? "Submission update rejected.",
+        details: payloadData,
+      });
+    }
+    return res.data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}

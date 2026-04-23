@@ -175,6 +175,8 @@ export default function MainMySubmissionsPage() {
                       const title = s.sub_challenge_title ?? s.challenge_title;
                       const subtitle =
                         s.sub_challenge_title != null ? s.challenge_title : null;
+                      const pending =
+                        String(s.status).toLowerCase() === "pending";
                       return (
                         <li
                           key={s.id}
@@ -236,6 +238,35 @@ export default function MainMySubmissionsPage() {
                                 >
                                   OPEN
                                 </GameButton>
+
+                                {pending && s.sub_challenge_id ? (
+                                  <GameButton
+                                    type="button"
+                                    onClick={() =>
+                                      navigate(
+                                        `/challenge/sub/${s.sub_challenge_id}`,
+                                        {
+                                          state: {
+                                            challengeId: s.challenge_id,
+                                            editSubmission: {
+                                              id: s.id,
+                                              challenge_id: s.challenge_id,
+                                              sub_challenge_id: s.sub_challenge_id,
+                                              content: s.content,
+                                              file_url: s.file_url,
+                                            },
+                                          },
+                                        },
+                                      )
+                                    }
+                                    fullWidth={false}
+                                    outerBgClass="bg-[#C5A059]"
+                                    bgClass="!rounded-md border !border-[#333B36] bg-[#C5A059] !px-6 !py-2 hover:bg-[#b8924f]"
+                                    fontClass="font-Shuriken text-[0.65rem] font-black tracking-[0.22em] text-black"
+                                  >
+                                    EDIT
+                                  </GameButton>
+                                ) : null}
 
                                 {fileHref ? (
                                   <a
