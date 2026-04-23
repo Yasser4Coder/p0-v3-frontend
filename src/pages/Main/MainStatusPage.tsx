@@ -4,7 +4,7 @@ import BrandedShell from "../../components/BrandedShell";
 import { motion } from "framer-motion";
 import { getMe } from "../../lib/auth/api";
 import { getAuthUser } from "../../lib/auth/storage";
-import { getMyTeamStats } from "../../lib/teams/api";
+import { getMyTeamStats, getTeamScoresByTrack } from "../../lib/teams/api";
 
 const glow =
   "0 0 8px rgba(255,255,255,0.75), 0 0 20px rgba(255,255,255,0.28)";
@@ -47,6 +47,13 @@ export default function MainStatusPage() {
   const [rank, setRank] = useState<string>("—");
   const [teamName, setTeamName] = useState<string>("—");
   const [totalScore, setTotalScore] = useState<string>("—");
+  const [trackScores, setTrackScores] = useState<{
+    cs: number;
+    ai: number;
+    ps: number;
+    gd: number;
+    ux: number;
+  }>({ cs: 0, ai: 0, ps: 0, gd: 0, ux: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -58,12 +65,32 @@ export default function MainStatusPage() {
         setRank(String(stats.rank));
         setTeamName(stats.team_name);
         setTotalScore(String(stats.total_score));
+
+        const tid = me.team_id;
+        if (typeof tid === "number" && Number.isFinite(tid) && tid > 0) {
+          const scores = await getTeamScoresByTrack(tid);
+          if (cancelled) return;
+          const next = { cs: 0, ai: 0, ps: 0, gd: 0, ux: 0 };
+          for (const t of scores.tracks ?? []) {
+            const name = String(t.track_name ?? "").trim().toLowerCase();
+            const score = Number(t.total_score) || 0;
+            if (name === "cs") next.cs = score;
+            else if (name === "ia" || name === "ai") next.ai = score;
+            else if (name === "problem solving" || name === "ps") next.ps = score;
+            else if (name === "gd") next.gd = score;
+            else if (name === "ui" || name === "ux") next.ux = score;
+          }
+          setTrackScores(next);
+        } else {
+          setTrackScores({ cs: 0, ai: 0, ps: 0, gd: 0, ux: 0 });
+        }
       } catch {
         if (!cancelled) {
           setUserName(getAuthUser()?.name ?? "—");
           setRank("—");
           setTeamName("—");
           setTotalScore("—");
+          setTrackScores({ cs: 0, ai: 0, ps: 0, gd: 0, ux: 0 });
         }
       }
     })();
@@ -131,13 +158,13 @@ export default function MainStatusPage() {
           <div className="mt-6 w-full max-w-3xl border border-white px-3 py-2 md:mt-8 md:px-6 md:py-3">
             <div className="grid grid-cols-1 gap-x-8 md:grid-cols-2">
               <div className="md:border-r md:border-white/20 md:pr-6">
-                <StatRow logo={logoCS} label="CS" value="50" />
-                <StatRow logo={logoAI} label="AI" value="50" />
-                <StatRow logo={logoPS} label="PS" value="50" />
+                <StatRow logo={logoCS} label="CS" value={String(trackScores.cs)} />
+                <StatRow logo={logoAI} label="AI" value={String(trackScores.ai)} />
+                <StatRow logo={logoPS} label="PS" value={String(trackScores.ps)} />
               </div>
               <div className="md:pl-6">
-                <StatRow logo={logoGD} label="GD" value="50" />
-                <StatRow logo={logoUX} label="UX" value="50" />
+                <StatRow logo={logoGD} label="GD" value={String(trackScores.gd)} />
+                <StatRow logo={logoUX} label="UX" value={String(trackScores.ux)} />
               </div>
             </div>
 

@@ -33,3 +33,41 @@ export async function getMyTeamStats() {
     throw toApiError(err);
   }
 }
+
+export type TeamTrackScore = {
+  track_id: number;
+  track_name: string;
+  total_score: number;
+};
+
+export type TeamScoresByTrack = {
+  team_id: number;
+  team_name: string;
+  tracks: TeamTrackScore[];
+};
+
+type TeamScoresByTrackResponse =
+  | { success: true; message: string; data: TeamScoresByTrack }
+  | { success: false; message: string; data: null };
+
+export async function getTeamScoresByTrack(teamId: number) {
+  try {
+    const res = await apiClient.get<TeamScoresByTrackResponse>(
+      `/api/teams/${teamId}/scores`,
+    );
+    const payload = res.data;
+
+    if (!payload?.success || !payload.data) {
+      throw new ApiError({
+        kind: "bad_request",
+        status: res.status,
+        message: payload?.message ?? "Could not load team scores.",
+        details: payload,
+      });
+    }
+
+    return payload.data;
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
