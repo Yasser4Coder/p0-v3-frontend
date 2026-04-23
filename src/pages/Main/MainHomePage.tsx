@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ApiError } from "../../lib/api/errors";
+import { getMe } from "../../lib/auth/api";
+import { getTeamScoresByTrack } from "../../lib/teams/api";
 import {
   getAnnouncements,
   type AnnouncementFromApi,
@@ -12,14 +14,13 @@ import {
 
 const GOLD = "#C5A059";
 
-const SKILLS: { label: string; value: number; tone: "green" | "gold" }[] = [
-  { label: "UIUX", value: 72, tone: "green" },
-  { label: "PROBLEM SOLVING", value: 64, tone: "green" },
-  { label: "GRAFIC DESIGN", value: 58, tone: "green" },
-  { label: "CYBER SECURITY", value: 81, tone: "green" },
-  { label: "AI", value: 45, tone: "green" },
-  { label: "TEAM PROGRES", value: 70, tone: "gold" },
-];
+const TOTAL_PER_TRACK = 2500;
+
+type SkillItem = { label: string; value: number; tone: "green" | "gold" };
+
+function clampPct(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
 
 function formatAnnouncementDate(iso: string): string {
   const d = new Date(iso);
@@ -70,6 +71,14 @@ export default function MainHomePage() {
   );
   const [index, setIndex] = useState(0);
   const [dir, setDir] = useState<-1 | 1>(1);
+  const [skills, setSkills] = useState<SkillItem[]>(() => [
+    { label: "UIUX", value: 0, tone: "green" },
+    { label: "PROBLEM SOLVING", value: 0, tone: "green" },
+    { label: "GRAFIC DESIGN", value: 0, tone: "green" },
+    { label: "CYBER SECURITY", value: 0, tone: "green" },
+    { label: "AI", value: 0, tone: "green" },
+    { label: "TEAM PROGRES", value: 0, tone: "gold" },
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +95,72 @@ export default function MainHomePage() {
           e instanceof ApiError ? e.message : "Could not load announcements.";
         setAnnouncements([]);
         setAnnouncementsError(message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await getMe();
+        const tid = me.team_id;
+        if (typeof tid !== "number" || !Number.isFinite(tid) || tid <= 0) {
+          if (!cancelled) {
+            setSkills((prev) =>
+              prev.map((s) => ({ ...s, value: 0 })),
+            );
+          }
+          return;
+        }
+
+        const scores = await getTeamScoresByTrack(tid);
+        if (cancelled) return;
+
+        const byKey: Record<"cs" | "ai" | "ps" | "gd" | "ux", number> = {
+          cs: 0,
+          ai: 0,
+          ps: 0,
+          gd: 0,
+          ux: 0,
+        };
+        for (const t of scores.tracks ?? []) {
+          const name = String(t.track_name ?? "").trim().toLowerCase();
+          const total = Number(t.total_score) || 0;
+          if (name === "cs") byKey.cs = total;
+          else if (name === "ai" || name === "ia") byKey.ai = total;
+          else if (name === "ps" || name === "problem solving") byKey.ps = total;
+          else if (name === "gd") byKey.gd = total;
+          else if (name === "ux" || name === "ui" || name === "uiux")
+            byKey.ux = total;
+        }
+
+        const csPct = clampPct((byKey.cs / TOTAL_PER_TRACK) * 100);
+        const aiPct = clampPct((byKey.ai / TOTAL_PER_TRACK) * 100);
+        const psPct = clampPct((byKey.ps / TOTAL_PER_TRACK) * 100);
+        const gdPct = clampPct((byKey.gd / TOTAL_PER_TRACK) * 100);
+        const uxPct = clampPct((byKey.ux / TOTAL_PER_TRACK) * 100);
+        const teamPct = clampPct(
+          ((byKey.cs + byKey.ai + byKey.ps + byKey.gd + byKey.ux) /
+            (TOTAL_PER_TRACK * 5)) *
+            100,
+        );
+
+        setSkills([
+          { label: "UIUX", value: uxPct, tone: "green" },
+          { label: "PROBLEM SOLVING", value: psPct, tone: "green" },
+          { label: "GRAFIC DESIGN", value: gdPct, tone: "green" },
+          { label: "CYBER SECURITY", value: csPct, tone: "green" },
+          { label: "AI", value: aiPct, tone: "green" },
+          { label: "TEAM PROGRES", value: teamPct, tone: "gold" },
+        ]);
+      } catch {
+        if (!cancelled) {
+          setSkills((prev) => prev.map((s) => ({ ...s, value: 0 })));
+        }
       }
     })();
     return () => {
@@ -133,7 +208,7 @@ export default function MainHomePage() {
             Status
           </h2>
           <div className="flex flex-col gap-3 md:gap-4">
-            {SKILLS.map((s) => (
+            {skills.map((s) => (
               <SkillBar
                 key={s.label}
                 label={s.label}
