@@ -210,12 +210,101 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
   /** Rough tooltip width for clamping inside the map viewBox */
   function tooltipMetrics(title: string) {
     const padX = 12;
-    const maxChars = 36;
-    const t =
-      title.length > maxChars ? `${title.slice(0, maxChars).trim()}…` : title;
-    const estW = Math.min(280, Math.max(120, t.length * 6.2 + padX * 2));
-    const h = 26;
-    return { text: t, w: estW, h, padX };
+    const padY = 8;
+    const fontSizePx = 10;
+    const fontWeight = 800;
+    const maxW = 300;
+    const minW = 140;
+    const lineHeightPx = 13;
+    const maxLines = 6;
+
+    // Canvas-based measurement for accurate per-title sizing.
+    // Falls back to a simple estimate if canvas isn't available.
+    const measure = (() => {
+      try {
+        if (typeof document === "undefined") return null;
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return null;
+        ctx.font = `${fontWeight} ${fontSizePx}px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif`;
+        return (s: string) => ctx.measureText(s).width;
+      } catch {
+        return null;
+      }
+    })();
+
+    const measureText = (s: string) =>
+      measure ? measure(s) : s.length * 6.2;
+
+    const words = title.trim().split(/\s+/).filter(Boolean);
+    const contentMax = maxW - padX * 2;
+
+    const lines: string[] = [];
+    let current = "";
+
+    const pushLine = (line: string) => {
+      lines.push(line);
+    };
+
+    const flushCurrent = () => {
+      if (current.trim()) pushLine(current.trim());
+      current = "";
+    };
+
+    // Wrap by words, but allow long tokens to break (up to maxLines).
+    for (const w of words.length ? words : [title]) {
+      const candidate = current ? `${current} ${w}` : w;
+      if (measureText(candidate) <= contentMax) {
+        current = candidate;
+        continue;
+      }
+      // If current already has content, flush it and retry the word on a new line.
+      if (current) {
+        flushCurrent();
+        if (lines.length >= maxLines) break;
+      }
+      // Word itself may be too long: split by characters until it fits.
+      if (measureText(w) > contentMax) {
+        let chunk = "";
+        for (const ch of w) {
+          const next = chunk + ch;
+          if (measureText(next) <= contentMax) {
+            chunk = next;
+          } else {
+            if (chunk) pushLine(chunk);
+            chunk = ch;
+            if (lines.length >= maxLines) break;
+          }
+        }
+        current = chunk;
+        if (lines.length >= maxLines) break;
+      } else {
+        current = w;
+      }
+    }
+
+    if (lines.length < maxLines) flushCurrent();
+
+    // Add ellipsis only if we hit maxLines.
+    const visible = lines.slice(0, maxLines);
+    const hitLimit = lines.length >= maxLines;
+    if (hitLimit && visible.length) {
+      const lastIdx = visible.length - 1;
+      let last = visible[lastIdx] ?? "";
+      // If we still have more content, ellipsize the last line.
+      while (last && measureText(`${last}…`) > contentMax) {
+        last = last.slice(0, -1);
+      }
+      visible[lastIdx] = last ? `${last}…` : "…";
+    }
+
+    const widest = Math.max(
+      ...visible.map((l) => measureText(l)),
+      0,
+    );
+    const w = Math.min(maxW, Math.max(minW, Math.ceil(widest + padX * 2)));
+    const h = padY * 2 + lineHeightPx * Math.max(1, visible.length);
+    return { lines: visible, w, h, padX, padY, lineHeightPx, fontSizePx, fontWeight };
   }
 
   return (
@@ -315,7 +404,10 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
                       const maxLeft = MAP_VIEW_W - node.x - PADDING - m.w;
                       const minLeft = PADDING - node.x;
                       const tipX = Math.min(maxLeft, Math.max(minLeft, tipXRaw));
-                      const tipY = -MAP_NODE_HIT_R - m.h - 10;
+                      const tipYRaw = -MAP_NODE_HIT_R - m.h - 10;
+                      const maxTop = MAP_VIEW_H - node.y - PADDING - m.h;
+                      const minTop = PADDING - node.y;
+                      const tipY = Math.min(maxTop, Math.max(minTop, tipYRaw));
                       return (
                         <g
                           className="pointer-events-none"
@@ -333,22 +425,25 @@ export default function DashboardMapPanel({ wideMap }: DashboardMapPanelProps) {
                             stroke="rgba(255,255,255,0.42)"
                             strokeWidth={1}
                           />
-                          <text
+                          <foreignObject
                             x={m.padX}
-                            y={17}
-                            fill="#ffffff"
-                            fontFamily="inherit"
-                            fontSize={10}
-                            fontWeight={700}
-                            letterSpacing="0.08em"
-                            style={{
-                              paintOrder: "stroke fill",
-                              stroke: "rgba(0,0,0,0.55)",
-                              strokeWidth: 3,
-                            }}
+                            y={m.padY}
+                            width={Math.max(0, m.w - m.padX * 2)}
+                            height={Math.max(0, m.h - m.padY * 2)}
                           >
-                            {m.text}
-                          </text>
+                            <div
+                              style={{
+                                color: "#fff",
+                                fontSize: `${m.fontSizePx}px`,
+                                fontWeight: m.fontWeight,
+                                letterSpacing: "0.08em",
+                                lineHeight: `${m.lineHeightPx}px`,
+                                whiteSpace: "pre-wrap",
+                              }}
+                            >
+                              {m.lines.join("\n")}
+                            </div>
+                          </foreignObject>
                         </g>
                       );
                     })()
