@@ -519,6 +519,13 @@ export default function MainChallengePage() {
   const fileHref = resolveApiFileUrl(activeSub.file_url);
   const currentEditFileHref = resolveApiFileUrl(editContext?.file_url ?? null);
 
+  const gdBgText =
+    domain === "gd"
+      ? apiChallenge.id === 32 && activeSub.id === 17
+        ? "GI-NEN-0001"
+        : "GI-NEN"
+      : null;
+
   const canSubmit =
     challengeId != null && apiChallenge != null && activeSub != null;
 
@@ -670,15 +677,25 @@ export default function MainChallengePage() {
               </div>
             ) : null}
 
-            <div
-              className="font-sans text-left text-[0.9rem] font-normal normal-case leading-relaxed tracking-normal text-white/95 sm:text-base md:text-lg md:leading-relaxed"
-              style={{ textShadow: glow, whiteSpace: "pre-wrap" }}
-            >
-              {apiError ? (
-                <span className="text-red-200/95">{apiError}</span>
-              ) : (
-                narrative
-              )}
+            <div className="relative">
+              {gdBgText ? (
+                <div
+                  className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 rotate-[-12deg] select-none font-sans text-[1.35rem] font-black tracking-[0.22em] text-white/60 sm:text-[1.55rem] md:text-[1.8rem]"
+                  aria-hidden
+                >
+                  {gdBgText}
+                </div>
+              ) : null}
+              <div
+                className="font-sans text-left text-[0.9rem] font-normal normal-case leading-relaxed tracking-normal text-white/95 sm:text-base md:text-lg md:leading-relaxed"
+                style={{ textShadow: glow, whiteSpace: "pre-wrap" }}
+              >
+                {apiError ? (
+                  <span className="text-red-200/95">{apiError}</span>
+                ) : (
+                  narrative
+                )}
+              </div>
             </div>
 
             <h2
