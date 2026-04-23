@@ -9,6 +9,7 @@ import MainNeedsPage from "../pages/Main/MainNeedsPage";
 import MainScoreBoardPage from "../pages/Main/MainScoreBoardPage";
 import MainStatusPage from "../pages/Main/MainStatusPage";
 import MainTimerPage from "../pages/Main/MainTimerPage";
+import MainMySubmissionsPage from "../pages/Main/MainMySubmissionsPage";
 import Splash from "../pages/Splash";
 import Welcome from "../pages/Welcome";
 import RequireAuth from "./RequireAuth";
@@ -28,6 +29,7 @@ export default function AppRoutes() {
         }
       >
         <Route index element={<MainChallengePage />} />
+        <Route path="sub/:subChallengeId" element={<MainChallengePage />} />
       </Route>
       <Route
         path="/main"
@@ -41,6 +43,7 @@ export default function AppRoutes() {
         <Route path="status" element={<MainStatusPage />} />
         <Route path="cards" element={<MainCardsPage />} />
         <Route path="score-board" element={<MainScoreBoardPage />} />
+        <Route path="my-submissions" element={<MainMySubmissionsPage />} />
         <Route path="needs" element={<MainNeedsPage />} />
         <Route path="timer" element={<MainTimerPage />} />
       </Route>

@@ -37,6 +37,7 @@ function mainDashboardBackground(pathname: string): string {
   if (p === "/main/status") return mainStatusBg;
   if (p === "/main/cards") return mainCardsBg;
   if (p === "/main/score-board") return mainScoreboardBg;
+  if (p === "/main/my-submissions") return mainBg;
   if (p === "/main/needs") return mainNeedsBg;
   if (p === "/main/timer") return mainTimerBg;
   if (p === "/main") return mainBg;

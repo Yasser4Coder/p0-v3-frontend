@@ -3,6 +3,7 @@ import splashGif from "./gif/splashScreenGif.gif";
 import splashBg from "./splashScreenBg.png";
 import buttonClickSound from "./sounds/buttonClick.mp3";
 import splashIntroMusic from "./sounds/HunterXHunterIntro.mp3";
+import notificationSound from "./sounds/notification.mp3";
 
 export {
   splashGif,
@@ -10,6 +11,7 @@ export {
   headerBg,
   buttonClickSound,
   splashIntroMusic,
+  notificationSound,
 };
 
 /**
@@ -26,5 +28,6 @@ export const splashPriorityAssets = [
   ...splashCriticalAssets,
   buttonClickSound,
   splashIntroMusic,
+  notificationSound,
   ...splashPublicAssets,
 ];

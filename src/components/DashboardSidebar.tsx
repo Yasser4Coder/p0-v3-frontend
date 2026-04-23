@@ -8,6 +8,7 @@ export const DASHBOARD_NAV_ITEMS = [
   "STATUS",
   "CARDS",
   "SCORE BOARD",
+  "MY SUBMISSIONS",
   "MENTOR",
   "NEEDS",
   "TIMER",
@@ -21,6 +22,7 @@ export const DASHBOARD_NAV_ROUTES: Record<DashboardNavId, string | null> = {
   STATUS: "/main/status",
   CARDS: "/main/cards",
   "SCORE BOARD": "/main/score-board",
+  "MY SUBMISSIONS": "/main/my-submissions",
   MENTOR: null,
   NEEDS: "/main/needs",
   TIMER: "/main/timer",
@@ -28,6 +30,7 @@ export const DASHBOARD_NAV_ROUTES: Record<DashboardNavId, string | null> = {
 
 /** Longer paths first so `/main` only matches the dashboard home index. */
 const MATCH_ORDER: { path: string; id: DashboardNavId }[] = [
+  { path: "/main/my-submissions", id: "MY SUBMISSIONS" },
   { path: "/main/score-board", id: "SCORE BOARD" },
   { path: "/main/status", id: "STATUS" },
   { path: "/main/cards", id: "CARDS" },

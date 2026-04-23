@@ -4,6 +4,7 @@ import {
   Navigate,
   useLocation,
   useNavigate,
+  useParams,
   useSearchParams,
 } from "react-router-dom";
 import BrandedShell from "../../components/BrandedShell";
@@ -25,9 +26,13 @@ import {
   playCorrectAnswerVoice,
   playWrongAnswerVoice,
 } from "../../audio/playSubmissionResultSound";
-import type { ChallengeDetailFromApi } from "../../types/challenge";
+import type {
+  ChallengeDetailFromApi,
+  SubChallengeFromApi,
+} from "../../types/challenge";
 import {
   CHALLENGE_BY_NODE,
+  DOMAIN_SUBCHALLENGE_BTN,
   DOMAIN_THEME,
   domainKeyFromTrackId,
   domainKeyFromTrackName,
@@ -45,6 +50,23 @@ const TRACK_LABEL: Record<number, string> = {
   6: "UX",
   7: "GD",
 };
+
+function buildTaskBody(task: {
+  type: string;
+  points: number | null;
+  max_points: number | null;
+  min_points: number | null;
+  decay: number | null;
+}): string {
+  const parts: string[] = [`Type: ${task.type}`];
+  if (task.points != null) parts.push(`Points: ${task.points}`);
+  if (task.type === "auto") {
+    if (task.max_points != null) parts.push(`Max: ${task.max_points}`);
+    if (task.min_points != null) parts.push(`Min: ${task.min_points}`);
+    if (task.decay != null) parts.push(`Decay: ${task.decay}`);
+  }
+  return parts.join(" · ");
+}
 
 type ChallengeLocationState = {
   challengeId?: unknown;
@@ -66,6 +88,9 @@ function parseChallengeId(value: unknown): number | null {
 export default function MainChallengePage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { subChallengeId: subChallengeIdParam } = useParams<{
+    subChallengeId?: string;
+  }>();
   const [searchParams] = useSearchParams();
   const locationState = location.state as ChallengeLocationState | null;
 
@@ -156,7 +181,7 @@ export default function MainChallengePage() {
     setSubmissionFile(null);
     setSubmitFeedback(null);
     if (submissionFileRef.current) submissionFileRef.current.value = "";
-  }, [challengeId]);
+  }, [challengeId, subChallengeIdParam]);
 
   useEffect(() => {
     if (challengeId == null) {
@@ -250,6 +275,36 @@ export default function MainChallengePage() {
     return <Navigate to="/main" replace />;
   }
 
+  const subs: SubChallengeFromApi[] = apiChallenge?.sub_challenges ?? [];
+  const hasSubs = subs.length > 0;
+  const parsedSubId =
+    subChallengeIdParam != null && subChallengeIdParam.trim() !== ""
+      ? Number(subChallengeIdParam)
+      : NaN;
+
+  if (
+    subChallengeIdParam != null &&
+    subChallengeIdParam.trim() !== "" &&
+    !Number.isFinite(parsedSubId)
+  ) {
+    return <Navigate to="/challenge" replace state={location.state} />;
+  }
+
+  const activeSub =
+    Number.isFinite(parsedSubId) && hasSubs
+      ? subs.find((s) => s.id === parsedSubId)
+      : undefined;
+
+  if (
+    subChallengeIdParam != null &&
+    subChallengeIdParam.trim() !== "" &&
+    apiChallenge
+  ) {
+    if (!hasSubs || !activeSub) {
+      return <Navigate to="/challenge" replace state={location.state} />;
+    }
+  }
+
   const c = CHALLENGE_BY_NODE[domain];
   const theme = DOMAIN_THEME[domain];
 
@@ -259,38 +314,169 @@ export default function MainChallengePage() {
           TRACK_LABEL[apiChallenge.track_id] ?? `TRACK ${apiChallenge.track_id}`
         }`
       : c.zoneLabel;
-  const domainTitle =
-    apiChallenge != null ? apiChallenge.title.toUpperCase() : c.domainTitle;
-  const narrative =
-    apiChallenge != null ? apiChallenge.description : c.narrative;
-  const taskBody =
-    apiChallenge != null
-      ? (() => {
-          const parts: string[] = [`Type: ${apiChallenge.type}`];
-          if (apiChallenge.points != null) {
-            parts.push(`Points: ${apiChallenge.points}`);
-          }
-          if (apiChallenge.type === "auto") {
-            if (apiChallenge.max_points != null) {
-              parts.push(`Max: ${apiChallenge.max_points}`);
-            }
-            if (apiChallenge.min_points != null) {
-              parts.push(`Min: ${apiChallenge.min_points}`);
-            }
-            if (apiChallenge.decay != null) {
-              parts.push(`Decay: ${apiChallenge.decay}`);
-            }
-          }
-          return parts.join(" · ");
-        })()
-      : c.taskBody;
 
-  const fileHref = resolveApiFileUrl(apiChallenge?.file_url);
+  /** Index: pick a sub-challenge before opening the task view */
+  if (!subChallengeIdParam?.trim() && hasSubs && apiChallenge) {
+    return (
+      <>
+        <motion.div
+          className="flex w-full min-w-0 flex-1 flex-col"
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <BrandedShell
+            compact
+            className={[
+              "relative flex min-h-[min(52vh,520px)] flex-1 flex-col overflow-hidden",
+              theme.shellBorder,
+              theme.shellRing,
+              "bg-linear-to-br! from-white/11! via-white/5! to-white/3!",
+              "backdrop-blur-3xl backdrop-saturate-200",
+              "shadow-[0_12px_48px_rgba(0,0,0,0.4),inset_0_1px_0_0_rgba(255,255,255,0.18)]",
+              "md:min-h-[min(62vh,640px)]",
+            ].join(" ")}
+          >
+            <div
+              className="pointer-events-none absolute inset-0 bg-linear-to-b from-transparent via-black/10 to-black/25"
+              aria-hidden
+            />
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-6 px-2 py-4 sm:px-4 md:px-6 md:py-6">
+              <header className="flex flex-col items-center gap-2 text-center">
+                <p
+                  className="font-Shuriken text-[0.65rem] font-bold tracking-[0.22em] text-white/90 sm:text-xs"
+                  style={{ textShadow: glow }}
+                >
+                  {zoneLabel}
+                </p>
+                <h1
+                  className="font-Shuriken text-lg font-black tracking-[0.18em] text-white sm:text-xl md:text-2xl"
+                  style={{ textShadow: glow }}
+                >
+                  {apiChallenge.title.toUpperCase()}
+                </h1>
+                <p className="max-w-xl font-Shuriken text-[0.65rem] leading-relaxed tracking-[0.1em] text-white/75 sm:text-xs">
+                  {apiChallenge.description}
+                </p>
+              </header>
 
-  const canSubmit = challengeId != null && apiChallenge != null;
+              <div
+                className={[
+                  "rounded-xl px-3 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] sm:px-5 md:px-6",
+                  theme.innerPanelClass,
+                ].join(" ")}
+              >
+                <h2
+                  className="font-Shuriken text-sm font-black tracking-[0.28em] sm:text-base"
+                  style={{ color: theme.taskColor, textShadow: glow }}
+                >
+                  CHOOSE A CHALLENGE
+                </h2>
+                <ul className="mt-5 flex flex-col gap-3">
+                  {subs.map((sc) => {
+                    const subBtn = DOMAIN_SUBCHALLENGE_BTN[domain];
+                    return (
+                      <li key={sc.id}>
+                        <GameButton
+                          type="button"
+                          onClick={() =>
+                            navigate(`/challenge/sub/${sc.id}`, {
+                              state: location.state,
+                            })
+                          }
+                          fullWidth
+                          className="w-full min-w-0 !max-w-none"
+                          outerBgClass={subBtn.outerBgClass}
+                          bgClass={subBtn.bgClass}
+                          fontClass={subBtn.fontClass}
+                        >
+                          <span className="line-clamp-2">{sc.title}</span>
+                        </GameButton>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-3">
+                <GameButton
+                  to="/main"
+                  onClick={() => clearChallengeContext()}
+                  fullWidth={false}
+                  className="shrink-0"
+                  outerBgClass="bg-[#C5A059]"
+                  bgClass="!rounded-md border !border-[#333B36] bg-[#C5A059] !px-10 !py-2.5 hover:bg-[#b8924f]"
+                  fontClass="font-Shuriken text-xs font-black tracking-[0.35em] text-black md:text-sm"
+                >
+                  HOME
+                </GameButton>
+              </div>
+            </div>
+          </BrandedShell>
+        </motion.div>
+      </>
+    );
+  }
+
+  /** Parent challenge has no sub-challenges — nothing to submit */
+  if (!subChallengeIdParam?.trim() && !hasSubs && apiChallenge) {
+    return (
+      <motion.div
+        className="flex w-full min-w-0 flex-1 flex-col"
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <BrandedShell
+          compact
+          className={[
+            "relative flex min-h-[min(40vh,360px)] flex-1 flex-col overflow-hidden",
+            theme.shellBorder,
+            theme.shellRing,
+            "bg-linear-to-br! from-white/11! via-white/5! to-white/3!",
+            "backdrop-blur-3xl backdrop-saturate-200",
+          ].join(" ")}
+        >
+          <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-6 px-4 py-8 text-center">
+            <p className="font-Shuriken text-sm tracking-[0.14em] text-white/85">
+              No sub-challenges are available for this challenge yet.
+            </p>
+            <GameButton
+              to="/main"
+              onClick={() => clearChallengeContext()}
+              outerBgClass="bg-[#C5A059]"
+              bgClass="!rounded-md border !border-[#333B36] bg-[#C5A059] !px-10 !py-2.5 hover:bg-[#b8924f]"
+              fontClass="font-Shuriken text-xs font-black tracking-[0.35em] text-black md:text-sm"
+            >
+              HOME
+            </GameButton>
+          </div>
+        </BrandedShell>
+      </motion.div>
+    );
+  }
+
+  if (!activeSub || !apiChallenge) {
+    return <Navigate to="/main" replace />;
+  }
+
+  const domainTitle = activeSub.title.toUpperCase();
+  const narrative = activeSub.description;
+  const taskBody = buildTaskBody({
+    type: activeSub.type,
+    points: activeSub.points,
+    max_points: activeSub.max_points,
+    min_points: activeSub.min_points,
+    decay: activeSub.decay,
+  });
+
+  const fileHref = resolveApiFileUrl(activeSub.file_url);
+
+  const canSubmit =
+    challengeId != null && apiChallenge != null && activeSub != null;
 
   async function handleSendSubmission() {
-    if (!canSubmit || !apiChallenge) return;
+    if (!canSubmit || !apiChallenge || !activeSub) return;
     const content = submission.trim();
     if (!content) {
       setSubmitFeedback({
@@ -302,15 +488,21 @@ export default function MainChallengePage() {
     setSubmitLoading(true);
     setSubmitFeedback(null);
     try {
+      const parentChallengeId =
+        activeSub.challenge_id ?? apiChallenge.id;
+      const subChallengeId = activeSub.id;
+
       if (submissionFile) {
         await createSubmissionMultipart({
-          challenge_id: apiChallenge.id,
+          challenge_id: parentChallengeId,
+          sub_challenge_id: subChallengeId,
           content,
           file: submissionFile,
         });
       } else {
         await createSubmissionJson({
-          challenge_id: apiChallenge.id,
+          challenge_id: parentChallengeId,
+          sub_challenge_id: subChallengeId,
           content,
         });
       }
@@ -358,6 +550,22 @@ export default function MainChallengePage() {
         />
 
         <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-5 px-2 py-4 sm:px-4 md:px-6 md:py-6">
+          <div className="flex shrink-0 justify-start">
+            <GameButton
+              type="button"
+              onClick={() =>
+                navigate("/challenge", { state: location.state })
+              }
+              fullWidth={false}
+              className="shrink-0"
+              outerBgClass="bg-[#5a6b63]"
+              bgClass="!rounded-md border !border-[#333B36] bg-[#5a6b63]/90 !px-6 !py-2 hover:bg-[#4a5a53]"
+              fontClass="font-Shuriken text-[0.65rem] font-black tracking-[0.28em] text-white sm:text-xs"
+            >
+              ← BACK
+            </GameButton>
+          </div>
+
           <header className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div className="flex min-w-0 flex-1 items-center justify-center gap-3 sm:gap-5 md:gap-8">
               <img
@@ -378,6 +586,9 @@ export default function MainChallengePage() {
                 >
                   {domainTitle}
                 </h1>
+                <p className="mt-1 font-Shuriken text-[0.55rem] font-bold tracking-[0.14em] text-white/50 sm:text-[0.6rem]">
+                  {apiChallenge.title}
+                </p>
               </div>
               <img
                 src={c.logo}

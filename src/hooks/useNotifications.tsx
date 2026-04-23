@@ -12,6 +12,7 @@ import { useLocation } from "react-router-dom";
 import SubmissionFeedbackToast, {
   type SubmissionFeedback,
 } from "../components/SubmissionFeedbackToast";
+import { playNotificationSound } from "../audio/playNotificationSound";
 import { API_BASE_URL } from "../lib/api/client";
 import { getAccessToken, getAuthUser } from "../lib/auth/storage";
 import type {
@@ -122,6 +123,7 @@ function useNotificationsInternal(pathname: string) {
       try {
         const raw = JSON.parse(event.data) as SubmissionReviewedPayload;
         const item = payloadToItem(raw);
+        playNotificationSound();
         setNotifications((prev) => [item, ...prev].slice(0, MAX_ITEMS));
         setToastFeedback(toastFromPayload(raw));
       } catch {

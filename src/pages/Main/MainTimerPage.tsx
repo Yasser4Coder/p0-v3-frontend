@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import BrandedShell from "../../components/BrandedShell";
 import { motion } from "framer-motion";
-
-/** Match mockup start: 36:36:00 */
-const INITIAL_SECONDS = 36 * 3600 + 36 * 60;
+import { getTimer } from "../../lib/timer/api";
 
 function formatHMS(totalSec: number) {
-  const t = Math.max(0, totalSec);
+  const t = Math.max(0, Math.floor(totalSec));
   const h = Math.floor(t / 3600);
   const m = Math.floor((t % 3600) / 60);
   const s = t % 60;
@@ -16,16 +14,43 @@ function formatHMS(totalSec: number) {
 const glow =
   "0 0 12px rgba(255,255,255,0.45), 0 0 28px rgba(255,255,255,0.18)";
 
-/** `/main/timer` — glass panel, digital clock, tagline (see UI mock). */
+const POLL_MS = 1000;
+
+/** `/main/timer` — reads `/api/timer` (server truth); polls instead of counting down locally. */
 export default function MainTimerPage() {
-  const [remaining, setRemaining] = useState(INITIAL_SECONDS);
+  const [remainingSec, setRemainingSec] = useState<number | null>(null);
+  const [statusLabel, setStatusLabel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      setRemaining((r) => (r <= 0 ? 0 : r - 1));
-    }, 1000);
-    return () => window.clearInterval(id);
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const snap = await getTimer();
+        if (cancelled) return;
+        setError(null);
+        setRemainingSec(Math.floor(snap.remaining_ms / 1000));
+        if (snap.idle) setStatusLabel("Idle");
+        else if (snap.status === "paused") setStatusLabel("Paused");
+        else if (snap.status === "expired" || snap.expired) setStatusLabel("Ended");
+        else setStatusLabel(null);
+      } catch {
+        if (cancelled) return;
+        setError("Could not sync timer.");
+      }
+    };
+
+    void tick();
+    const id = window.setInterval(() => void tick(), POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, []);
+
+  const display =
+    remainingSec === null ? "— — —" : formatHMS(remainingSec);
 
   return (
     <motion.div
@@ -57,16 +82,32 @@ export default function MainTimerPage() {
               TIMER
             </h1>
 
+            {statusLabel ? (
+              <p className="shrink-0 pt-3 text-center font-Shuriken text-xs font-bold uppercase tracking-[0.35em] text-[#39FF14]/85">
+                {statusLabel}
+              </p>
+            ) : null}
+
             <div className="flex flex-1 items-center justify-center px-4 py-6">
               <p
                 className="text-center font-Shuriken text-5xl font-black tabular-nums tracking-[0.12em] text-white sm:text-6xl md:text-7xl lg:text-8xl"
                 style={{ textShadow: glow }}
                 aria-live="polite"
-                aria-label={`Time remaining ${formatHMS(remaining)}`}
+                aria-label={
+                  remainingSec === null
+                    ? "Loading timer"
+                    : `Time remaining ${formatHMS(remainingSec)}`
+                }
               >
-                {formatHMS(remaining)}
+                {display}
               </p>
             </div>
+
+            {error ? (
+              <p className="shrink-0 pb-2 text-center font-Shuriken text-xs tracking-[0.12em] text-red-300/95">
+                {error}
+              </p>
+            ) : null}
 
             <p className="shrink-0 pb-8 text-center font-Shuriken text-[0.65rem] font-bold uppercase tracking-[0.28em] text-white/92 md:pb-10 md:text-sm">
               THE CLOCK IS YOUR ENEMY.

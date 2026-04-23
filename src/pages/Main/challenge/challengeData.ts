@@ -66,6 +66,48 @@ export type DomainTheme = {
   inputFocusClass: string;
 };
 
+/** Sub-challenge picker rows — accent matches each track (see `DOMAIN_THEME`). */
+export const DOMAIN_SUBCHALLENGE_BTN: Record<
+  DomainKey,
+  { outerBgClass: string; bgClass: string; fontClass: string }
+> = {
+  cs: {
+    outerBgClass: "bg-[#062208]",
+    bgClass:
+      "!rounded-md border !border-[#39FF14]/55 bg-[#0d1f0f]/93 !px-5 !py-3 shadow-[inset_0_1px_0_rgba(57,255,20,0.18)] hover:bg-[#0f2612] hover:border-[#39FF14]/75",
+    fontClass:
+      "font-Shuriken text-left text-xs font-black tracking-[0.12em] text-[#c8ffc8] md:text-sm [&>div]:justify-start [&>div]:text-left",
+  },
+  ps: {
+    outerBgClass: "bg-[#450505]",
+    bgClass:
+      "!rounded-md border !border-[#B81212]/75 bg-[#280303]/95 !px-5 !py-3 shadow-[inset_0_1px_0_rgba(232,93,93,0.18)] hover:bg-[#3a0707] hover:border-[#E85D5D]/65",
+    fontClass:
+      "font-Shuriken text-left text-xs font-black tracking-[0.12em] text-[#fec8c8] md:text-sm [&>div]:justify-start [&>div]:text-left",
+  },
+  ai: {
+    outerBgClass: "bg-[#052832]",
+    bgClass:
+      "!rounded-md border !border-[#1294B8]/65 bg-[#082022]/93 !px-5 !py-3 shadow-[inset_0_1px_0_rgba(78,203,255,0.14)] hover:bg-[#0a2e38] hover:border-[#4ECBFF]/55",
+    fontClass:
+      "font-Shuriken text-left text-xs font-black tracking-[0.12em] text-[#bae6fd] md:text-sm [&>div]:justify-start [&>div]:text-left",
+  },
+  ux: {
+    outerBgClass: "bg-[#2a0528]",
+    bgClass:
+      "!rounded-md border !border-[#A855F7]/55 bg-[#18051a]/93 !px-5 !py-3 shadow-[inset_0_1px_0_rgba(217,70,239,0.14)] hover:bg-[#230926] hover:border-[#D946EF]/45",
+    fontClass:
+      "font-Shuriken text-left text-xs font-black tracking-[0.12em] text-[#f0d4ff] md:text-sm [&>div]:justify-start [&>div]:text-left",
+  },
+  gd: {
+    outerBgClass: "bg-[#3d2f12]",
+    bgClass:
+      "!rounded-md border !border-[#C5A059]/65 bg-[#1f1808]/93 !px-5 !py-3 shadow-[inset_0_1px_0_rgba(225,214,158,0.12)] hover:bg-[#2d2410] hover:border-[#E1D69E]/55",
+    fontClass:
+      "font-Shuriken text-left text-xs font-black tracking-[0.12em] text-[#f5ebd4] md:text-sm [&>div]:justify-start [&>div]:text-left",
+  },
+};
+
 export const DOMAIN_THEME: Record<DomainKey, DomainTheme> = {
   cs: {
     shellBorder: "border-2! border-[#138F00]/65",
