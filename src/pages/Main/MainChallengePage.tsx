@@ -398,9 +398,12 @@ export default function MainChallengePage() {
                 >
                   {apiChallenge.title.toUpperCase()}
                 </h1>
-                <p className="max-w-xl font-Shuriken text-[0.65rem] leading-relaxed tracking-[0.1em] text-white/75 sm:text-xs">
+                <div
+                  className="max-w-xl font-sans text-[0.9rem] font-normal normal-case leading-relaxed tracking-normal text-white/75 sm:text-base"
+                  style={{ whiteSpace: "pre-wrap" }}
+                >
                   {apiChallenge.description}
-                </p>
+                </div>
               </header>
 
               <div
@@ -631,12 +634,6 @@ export default function MainChallengePage() {
                 className={`h-12 w-12 shrink-0 rounded-full sm:h-14 sm:w-14 md:h-16 md:w-16 ${theme.logoClass}`}
               />
               <div className="min-w-0 flex-1 text-center">
-                <p
-                  className="font-Shuriken text-[0.65rem] font-bold tracking-[0.22em] text-white/90 sm:text-xs md:text-sm"
-                  style={{ textShadow: glow }}
-                >
-                  {zoneLabel}
-                </p>
                 <h1
                   className="mt-1 font-Shuriken text-lg font-black tracking-[0.18em] text-white sm:text-xl md:text-2xl"
                   style={{ textShadow: glow }}
@@ -673,16 +670,16 @@ export default function MainChallengePage() {
               </div>
             ) : null}
 
-            <p
-              className="font-Shuriken text-left text-[0.65rem] font-bold leading-relaxed tracking-[0.08em] text-white/95 sm:text-xs md:text-sm md:leading-relaxed md:tracking-[0.1em]"
-              style={{ textShadow: glow }}
+            <div
+              className="font-sans text-left text-[0.9rem] font-normal normal-case leading-relaxed tracking-normal text-white/95 sm:text-base md:text-lg md:leading-relaxed"
+              style={{ textShadow: glow, whiteSpace: "pre-wrap" }}
             >
               {apiError ? (
                 <span className="text-red-200/95">{apiError}</span>
               ) : (
                 narrative
               )}
-            </p>
+            </div>
 
             <h2
               className="mt-6 font-Shuriken text-sm font-black tracking-[0.28em] sm:text-base"
