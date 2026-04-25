@@ -16,10 +16,54 @@ const GOLD = "#C5A059";
 
 const TOTAL_PER_TRACK = 2500;
 
+/** Set to `false` to load team track scores from the API again. */
+const USE_STATIC_HOME_SCORES = true;
+
+/** Same snapshot as `MainStatusPage` frozen track totals. */
+const FROZEN_TRACK_TOTALS: Record<"cs" | "ai" | "ps" | "gd" | "ux", number> = {
+  cs: 1500,
+  ai: 1500,
+  ps: 1500,
+  gd: 1200,
+  ux: 971,
+};
+
 type SkillItem = { label: string; value: number; tone: "green" | "gold" };
+
+const EMPTY_SKILLS: SkillItem[] = [
+  { label: "UIUX", value: 0, tone: "green" },
+  { label: "PROBLEM SOLVING", value: 0, tone: "green" },
+  { label: "GRAFIC DESIGN", value: 0, tone: "green" },
+  { label: "CYBER SECURITY", value: 0, tone: "green" },
+  { label: "AI", value: 0, tone: "green" },
+  { label: "TEAM PROGRES", value: 0, tone: "gold" },
+];
 
 function clampPct(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function buildSkillItemsFromByKey(
+  byKey: Record<"cs" | "ai" | "ps" | "gd" | "ux", number>,
+): SkillItem[] {
+  const csPct = clampPct((byKey.cs / TOTAL_PER_TRACK) * 100);
+  const aiPct = clampPct((byKey.ai / TOTAL_PER_TRACK) * 100);
+  const psPct = clampPct((byKey.ps / TOTAL_PER_TRACK) * 100);
+  const gdPct = clampPct((byKey.gd / TOTAL_PER_TRACK) * 100);
+  const uxPct = clampPct((byKey.ux / TOTAL_PER_TRACK) * 100);
+  const teamPct = clampPct(
+    ((byKey.cs + byKey.ai + byKey.ps + byKey.gd + byKey.ux) /
+      (TOTAL_PER_TRACK * 5)) *
+      100,
+  );
+  return [
+    { label: "UIUX", value: uxPct, tone: "green" },
+    { label: "PROBLEM SOLVING", value: psPct, tone: "green" },
+    { label: "GRAFIC DESIGN", value: gdPct, tone: "green" },
+    { label: "CYBER SECURITY", value: csPct, tone: "green" },
+    { label: "AI", value: aiPct, tone: "green" },
+    { label: "TEAM PROGRES", value: teamPct, tone: "gold" },
+  ];
 }
 
 function formatAnnouncementDate(iso: string): string {
@@ -71,14 +115,11 @@ export default function MainHomePage() {
   );
   const [index, setIndex] = useState(0);
   const [dir, setDir] = useState<-1 | 1>(1);
-  const [skills, setSkills] = useState<SkillItem[]>(() => [
-    { label: "UIUX", value: 0, tone: "green" },
-    { label: "PROBLEM SOLVING", value: 0, tone: "green" },
-    { label: "GRAFIC DESIGN", value: 0, tone: "green" },
-    { label: "CYBER SECURITY", value: 0, tone: "green" },
-    { label: "AI", value: 0, tone: "green" },
-    { label: "TEAM PROGRES", value: 0, tone: "gold" },
-  ]);
+  const [skills, setSkills] = useState<SkillItem[]>(() =>
+    USE_STATIC_HOME_SCORES
+      ? buildSkillItemsFromByKey(FROZEN_TRACK_TOTALS)
+      : [...EMPTY_SKILLS],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +144,8 @@ export default function MainHomePage() {
   }, []);
 
   useEffect(() => {
+    if (USE_STATIC_HOME_SCORES) return;
+
     let cancelled = false;
     (async () => {
       try {
@@ -110,9 +153,7 @@ export default function MainHomePage() {
         const tid = me.team_id;
         if (typeof tid !== "number" || !Number.isFinite(tid) || tid <= 0) {
           if (!cancelled) {
-            setSkills((prev) =>
-              prev.map((s) => ({ ...s, value: 0 })),
-            );
+            setSkills([...EMPTY_SKILLS]);
           }
           return;
         }
@@ -138,28 +179,10 @@ export default function MainHomePage() {
             byKey.ux = total;
         }
 
-        const csPct = clampPct((byKey.cs / TOTAL_PER_TRACK) * 100);
-        const aiPct = clampPct((byKey.ai / TOTAL_PER_TRACK) * 100);
-        const psPct = clampPct((byKey.ps / TOTAL_PER_TRACK) * 100);
-        const gdPct = clampPct((byKey.gd / TOTAL_PER_TRACK) * 100);
-        const uxPct = clampPct((byKey.ux / TOTAL_PER_TRACK) * 100);
-        const teamPct = clampPct(
-          ((byKey.cs + byKey.ai + byKey.ps + byKey.gd + byKey.ux) /
-            (TOTAL_PER_TRACK * 5)) *
-            100,
-        );
-
-        setSkills([
-          { label: "UIUX", value: uxPct, tone: "green" },
-          { label: "PROBLEM SOLVING", value: psPct, tone: "green" },
-          { label: "GRAFIC DESIGN", value: gdPct, tone: "green" },
-          { label: "CYBER SECURITY", value: csPct, tone: "green" },
-          { label: "AI", value: aiPct, tone: "green" },
-          { label: "TEAM PROGRES", value: teamPct, tone: "gold" },
-        ]);
+        setSkills(buildSkillItemsFromByKey(byKey));
       } catch {
         if (!cancelled) {
-          setSkills((prev) => prev.map((s) => ({ ...s, value: 0 })));
+          setSkills([...EMPTY_SKILLS]);
         }
       }
     })();
@@ -202,11 +225,22 @@ export default function MainHomePage() {
       >
         <BrandedShell className="px-4! py-5! shadow-lg md:px-5! md:py-6!">
           <h2
-            className="mb-4 font-Shuriken text-lg font-bold tracking-[0.25em] md:text-xl"
+            className="mb-3 font-Shuriken text-lg font-bold tracking-[0.25em] md:mb-4 md:text-xl"
             style={{ color: GOLD }}
           >
             Status
           </h2>
+          {USE_STATIC_HOME_SCORES ? (
+            <p
+              className="mb-3 text-center font-Shuriken text-[0.62rem] font-medium leading-[1.65] tracking-[0.12em] text-white/78 antialiased sm:text-[0.68rem] sm:tracking-[0.16em] md:mb-4"
+              style={{
+                textShadow:
+                  "0 0 24px rgba(255,255,255,0.18), 0 0 1px rgba(255,255,255,0.4)",
+              }}
+            >
+              The scores are freezing right now
+            </p>
+          ) : null}
           <div className="flex flex-col gap-3 md:gap-4">
             {skills.map((s) => (
               <SkillBar

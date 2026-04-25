@@ -4,6 +4,27 @@ import { apiClient } from "../lib/api/client";
 import { toApiError } from "../lib/api/errors";
 import type { ScoreboardTeam } from "../types/scoreboard";
 
+/** Set to `false` to use `/api/leaderboard/teams` and socket `teams:update` again. */
+const USE_STATIC_SCOREBOARD = true;
+
+/** Snapshot of team leaderboard (frozen; order preserved). */
+const FROZEN_LEADERBOARD_TEAMS: ScoreboardTeam[] = [
+  { id: "20", name: "Paranoid Android", totalScore: 6671 },
+  { id: "14", name: "Zero Day", totalScore: 6612 },
+  { id: "15", name: "Dev-x", totalScore: 6118 },
+  { id: "18", name: "Dahman", totalScore: 6060 },
+  { id: "16", name: "#1", totalScore: 5613 },
+  { id: "21", name: "Double Six", totalScore: 5303 },
+  { id: "19", name: "Chaos", totalScore: 5247 },
+  { id: "12", name: "TRT ONE", totalScore: 4936 },
+  { id: "22", name: "Post-Rose Meruem", totalScore: 4671 },
+  { id: "13", name: "EcoTech", totalScore: 4497 },
+  { id: "17", name: "BX0", totalScore: 3827 },
+  { id: "23", name: "UGANDA", totalScore: 1415 },
+  { id: "11", name: "t3.3", totalScore: 200 },
+  { id: "10", name: "t3.2", totalScore: 0 },
+];
+
 const DEMO_TEAMS: ScoreboardTeam[] = [
   { _id: "1", name: "ELEC TEAM", totalScore: 420 },
   { _id: "2", name: "HUNTERS", totalScore: 380 },
@@ -27,8 +48,12 @@ type TeamLeaderboardResponse =
   | { success: false; message: string; data: null };
 
 export function useScoreboardTeams(_myTeamName: string) {
-  const [teams, setTeams] = useState<ScoreboardTeam[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [teams, setTeams] = useState<ScoreboardTeam[]>(() =>
+    USE_STATIC_SCOREBOARD
+      ? FROZEN_LEADERBOARD_TEAMS.map((t) => ({ ...t }))
+      : [],
+  );
+  const [loading, setLoading] = useState(() => !USE_STATIC_SCOREBOARD);
   const [error, setError] = useState<string | null>(null);
 
   const applyServerOrder = useCallback((next: ScoreboardTeam[]) => {
@@ -37,6 +62,8 @@ export function useScoreboardTeams(_myTeamName: string) {
   }, []);
 
   useEffect(() => {
+    if (USE_STATIC_SCOREBOARD) return;
+
     let cancelled = false;
 
     async function load() {
@@ -77,6 +104,7 @@ export function useScoreboardTeams(_myTeamName: string) {
   }, [applyServerOrder]);
 
   useEffect(() => {
+    if (USE_STATIC_SCOREBOARD) return;
     const s = getScoreboardSocket();
     if (!s) return;
 

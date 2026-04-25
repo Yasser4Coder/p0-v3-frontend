@@ -6,6 +6,16 @@ import { getMe } from "../../lib/auth/api";
 import { getAuthUser } from "../../lib/auth/storage";
 import { getMyTeamStats, getTeamScoresByTrack } from "../../lib/teams/api";
 
+/** Set to `false` to load rank and scores from the API again. */
+const USE_STATIC_STATUS = true;
+
+const FROZEN_STATUS = {
+  rank: "1",
+  teamName: "Paranoid Android",
+  totalScore: "6671",
+  trackScores: { cs: 1500, ai: 1500, ps: 1500, gd: 1200, ux: 971 },
+} as const;
+
 const glow =
   "0 0 8px rgba(255,255,255,0.75), 0 0 20px rgba(255,255,255,0.28)";
 const glowStrong =
@@ -44,21 +54,38 @@ export default function MainStatusPage() {
   const [userName, setUserName] = useState(
     () => getAuthUser()?.name ?? "—",
   );
-  const [rank, setRank] = useState<string>("—");
-  const [teamName, setTeamName] = useState<string>("—");
-  const [totalScore, setTotalScore] = useState<string>("—");
+  const [rank, setRank] = useState<string>(() =>
+    USE_STATIC_STATUS ? FROZEN_STATUS.rank : "—",
+  );
+  const [teamName, setTeamName] = useState<string>(() =>
+    USE_STATIC_STATUS ? FROZEN_STATUS.teamName : "—",
+  );
+  const [totalScore, setTotalScore] = useState<string>(() =>
+    USE_STATIC_STATUS ? FROZEN_STATUS.totalScore : "—",
+  );
   const [trackScores, setTrackScores] = useState<{
     cs: number;
     ai: number;
     ps: number;
     gd: number;
     ux: number;
-  }>({ cs: 0, ai: 0, ps: 0, gd: 0, ux: 0 });
+  }>(() =>
+    USE_STATIC_STATUS
+      ? { ...FROZEN_STATUS.trackScores }
+      : { cs: 0, ai: 0, ps: 0, gd: 0, ux: 0 },
+  );
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        if (USE_STATIC_STATUS) {
+          const me = await getMe();
+          if (cancelled) return;
+          if (me.name) setUserName(me.name);
+          return;
+        }
+
         const [me, stats] = await Promise.all([getMe(), getMyTeamStats()]);
         if (cancelled) return;
         setUserName(me.name);
@@ -87,10 +114,12 @@ export default function MainStatusPage() {
       } catch {
         if (!cancelled) {
           setUserName(getAuthUser()?.name ?? "—");
-          setRank("—");
-          setTeamName("—");
-          setTotalScore("—");
-          setTrackScores({ cs: 0, ai: 0, ps: 0, gd: 0, ux: 0 });
+          if (!USE_STATIC_STATUS) {
+            setRank("—");
+            setTeamName("—");
+            setTotalScore("—");
+            setTrackScores({ cs: 0, ai: 0, ps: 0, gd: 0, ux: 0 });
+          }
         }
       }
     })();
@@ -155,7 +184,16 @@ export default function MainStatusPage() {
             </div>
           </div>
 
-          <div className="mt-6 w-full max-w-3xl border border-white px-3 py-2 md:mt-8 md:px-6 md:py-3">
+          {USE_STATIC_STATUS ? (
+            <p
+              className="mt-4 max-w-lg px-2 text-center font-Shuriken text-[0.68rem] font-medium leading-[1.65] tracking-[0.14em] text-white/78 antialiased sm:text-sm sm:tracking-[0.18em] md:mt-5 md:max-w-xl"
+              style={{ textShadow: "0 0 24px rgba(255,255,255,0.18), 0 0 1px rgba(255,255,255,0.4)" }}
+            >
+              The scores are freezing right now
+            </p>
+          ) : null}
+
+          <div className="mt-5 w-full max-w-3xl border border-white px-3 py-2 md:mt-7 md:px-6 md:py-3">
             <div className="grid grid-cols-1 gap-x-8 md:grid-cols-2">
               <div className="md:border-r md:border-white/20 md:pr-6">
                 <StatRow logo={logoCS} label="CS" value={String(trackScores.cs)} />
